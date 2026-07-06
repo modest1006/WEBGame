@@ -81,7 +81,7 @@ class Game {
     let judge;
     if (abs <= this.perfectWindow()) {
       judge = 'perfect';
-      this.groove++;
+      this.groove = Math.min(this.groove + 1, GROOVE_MAX);
       this.stats.perfect++;
       this.stats.maxGroove = Math.max(this.stats.maxGroove, this.groove);
       this.lastPerfectBeat = this.beat;
@@ -95,7 +95,7 @@ class Game {
     } else {
       judge = 'miss';
       this.stats.miss++;
-      this.groove = Math.floor(this.groove / 2);
+      this.groove = Math.max(0, this.groove - MISS_PENALTY);
     }
     // ダッシュ方向 = 移動入力（なければ向いている方向）
     let dx = this.ctrl.mx, dy = this.ctrl.my;
@@ -172,9 +172,9 @@ class Game {
     if (this.weapons.bass && beatIndex % WEAPONS.bass.everyBeats === 0) this.fireBass();
     if (this.weapons.nova && beatIndex % WEAPONS.nova.everyBeats === 0) this.fireNova();
 
-    // GROOVE減衰: PERFECTが途切れると1ビートごとに-1
+    // GROOVE減衰: PERFECTが途切れると1ビートごとに減衰
     if (this.groove > 0 && this.beat - this.lastPerfectBeat > GROOVE_DECAY_BEATS) {
-      this.groove--;
+      this.groove = Math.max(0, this.groove - GROOVE_DECAY_PER_BEAT);
       this.emit('groovedecay', { groove: this.groove });
     }
 

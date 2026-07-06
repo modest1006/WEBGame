@@ -5,7 +5,9 @@ const PERFECT_MS = 80;                 // ビート±この範囲のダッシュ
 const GOOD_MS = 150;                   // GOOD（GROOVE維持）
 const GROOVE_STEP = 0.15;              // GROOVE 1につき火力+15%
 const GROOVE_MAX = 20;                 // 倍率上限 = 1 + 20*0.15 = 4.0x
-const GROOVE_DECAY_BEATS = 8;          // PERFECTなしでこのビート数経過すると1ずつ減衰
+const GROOVE_DECAY_BEATS = 8;          // PERFECTなしでこのビート数経過すると減衰開始
+const MISS_PENALTY = 5;                // MISSで1ティアぶん没収
+const GROOVE_DECAY_PER_BEAT = 2;       // 減衰開始後、1ビートごとのGROOVE減少量
 // GROOVEティア（5毎に武器が進化）: 1=ビートショット+1弾 / 2=レーザー+1本＆ノヴァ2連 /
 // 3=ビートショット貫通＆サブウーファー射程拡大 / 4=レーザー延長
 const grooveTierOf = (groove) => Math.floor(Math.min(groove, GROOVE_MAX) / 5);

@@ -57,7 +57,7 @@ function installDebug(game) {
     },
     choices: () => game.choices.map((c, i) => `${i}: ${c.name} Lv${c.lv}`),
     pick: (i) => game.pick(i),
-    setGroove: (n) => { game.groove = n; game.lastPerfectBeat = game.beat; },
+    setGroove: (n) => { game.groove = Math.max(0, Math.min(Number(n) || 0, GROOVE_MAX)); game.lastPerfectBeat = game.beat; },
     setHp: (n) => { game.p.hp = n; },
     teleport: (x, y) => { game.p.x = x; game.p.y = y; },
   };
