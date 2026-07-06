@@ -185,6 +185,7 @@ html, body {
 
 .card {
   opacity: 0;
+  pointer-events: none; /* 登場演出前は押せない */
   transform: scale(0.6) translateY(24px);
   position: relative;
   width: 190px;
@@ -204,6 +205,7 @@ html, body {
 
 .card.in {
   opacity: 1;
+  pointer-events: auto;
   transform: none;
   animation: cardin 0.32s cubic-bezier(0.2, 1.7, 0.4, 1);
 }

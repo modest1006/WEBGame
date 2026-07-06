@@ -111,6 +111,20 @@ class Music {
     return this._nb;
   }
 
+  // 即時ノイズ音（SFX用の汎用ヘルパー）
+  noise({ dur = 0.1, gain = 0.05, freq = 1200, delay = 0 }) {
+    const t = this.ctx.currentTime + delay;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noiseBuf();
+    const f = this.ctx.createBiquadFilter();
+    f.type = 'highpass';
+    f.frequency.value = freq;
+    src.connect(f);
+    f.connect(this.env(t, dur, gain));
+    src.start(t);
+    src.stop(t + dur + 0.02);
+  }
+
   snare(t, vol) {
     const src = this.ctx.createBufferSource();
     src.buffer = this.noiseBuf();

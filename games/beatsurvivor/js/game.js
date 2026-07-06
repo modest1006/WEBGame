@@ -10,7 +10,14 @@ class Game {
   }
 
   on(fn) { this.listeners.push(fn); }
-  emit(type, data = {}) { for (const fn of this.listeners) fn(type, data); }
+
+  // リスナー（UI/SFX/描画エフェクト）の例外でゲームループを道連れにしない
+  emit(type, data = {}) {
+    for (const fn of this.listeners) {
+      try { fn(type, data); }
+      catch (err) { console.error(`[game] listener error on '${type}':`, err); }
+    }
+  }
 
   resetRun() {
     this.rng = new RNG(this.seedValue);
@@ -505,6 +512,7 @@ class Game {
   }
 
   openLevelUp() {
+    this.echoQueue = []; // 積み残しの残響がlevelup明けに古い位置で発動しないように
     const pool = this.upgradePool();
     if (pool.length === 0) { this.pendingLevels = 0; return; }
     this.choices = [];

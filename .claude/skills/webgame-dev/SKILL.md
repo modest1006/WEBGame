@@ -74,6 +74,16 @@ games/<game-name>/
 - `touch-action: none` や `preventDefault` でスクロール/ダブルタップズームの誤爆を防ぐ
 - viewport メタタグ必須。モバイル縦画面レイアウトを `preview_resize`（mobile）で必ず確認する
 
+## セルフレビューの必須経路
+
+- **音声をunlockした状態でも一通り動かすこと。** `music.unlock()` / `sfx.unlock()` を呼ばないテストは全SFXコードが早期returnでスキップされ、SFX内のバグ（未定義メソッド等）を見逃す。AudioContextはユーザー操作なしでも生成でき（suspendedのまま）、コード経路の検証には十分
+- ゲームループ（rAF）とイベントリスナーには例外境界を置く（try/catch＋console.error）。1つの演出バグで全体がフリーズする事故を防ぐ
+
+## デプロイ（GitHub Pages）
+
+- Pagesは全ファイル `max-age=600` でキャッシュされるため、**デプロイ直後は新旧ファイル混在が起きる**。JS/CSSを変更したら index.html のアセット参照のバージョンクエリ（`?v=N`）を必ず上げること
+- 「反映されない」報告はまずキャッシュを疑う（マーカー文字列を `Invoke-WebRequest` で確認する）
+
 ## 起動登録
 
 新ゲーム追加時は `.claude/launch.json` に静的サーバー設定を追加する（Python の `http.server` に `--directory games/<name>` を渡す方式でよい。ポートはゲーム毎に変える）。

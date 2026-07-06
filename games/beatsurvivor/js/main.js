@@ -119,7 +119,12 @@ game.on((type, data) => {
 
 const actions = {
   dash: () => game.dash(),
-  pick: (i) => { game.pick(i); syncOverlay(); },
+  pick: (i) => {
+    // まだビート演出で登場していないカードは選べない
+    if (cardQueue[i] && !cardQueue[i].classList.contains('in')) return;
+    game.pick(i);
+    syncOverlay();
+  },
   pause: () => {
     if (game.state === 'playing' || game.state === 'paused') {
       game.togglePause();
@@ -180,10 +185,15 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(now - last, 100);
   last = now;
-  game.update(dt);
-  renderer.render(game, dt);
-  updateHud();
-  debugOverlay.update(dt);
+  // 例外が出てもループは維持する（1フレーム破棄が最悪ケースになるように）
+  try {
+    game.update(dt);
+    renderer.render(game, dt);
+    updateHud();
+    debugOverlay.update(dt);
+  } catch (err) {
+    console.error('[frame]', err);
+  }
   requestAnimationFrame(frame);
 }
 
