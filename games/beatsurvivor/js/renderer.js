@@ -39,12 +39,25 @@ class Renderer {
         }
         break;
       }
+      case 'shot':
+        // 発射の瞬間のマズルリング（ビートを視覚化）
+        this.rings.push({
+          x: p.x, y: p.y, r: p.r + 2, max: p.r + (data.accent ? 34 : 20),
+          life: 0.18, age: 0, color: data.accent ? '#ffd23e' : '#ffe9b0', w: data.accent ? 3.5 : 2,
+        });
+        break;
       case 'nova':
-        this.rings.push({ x: p.x, y: p.y, r: 30, max: data.radius, life: 0.35, age: 0, color: '#3be8f0', w: 5 });
+        this.rings.push({
+          x: data.echo ? this.lastNovaX ?? p.x : p.x, y: data.echo ? this.lastNovaY ?? p.y : p.y,
+          r: 30, max: data.radius, life: 0.35, age: 0,
+          color: data.echo ? 'rgba(59,232,240,0.6)' : (data.accent ? '#ffd23e' : '#3be8f0'),
+          w: data.accent ? 8 : 5,
+        });
+        if (!data.echo) { this.lastNovaX = p.x; this.lastNovaY = p.y; }
         break;
       case 'bass':
-        this.cones.push({ x: p.x, y: p.y, dir: data.dir, range: data.range, arc: data.arc, age: 0, life: 0.28 });
-        this.shakeT = 80; this.shakeMag = 2.5;
+        this.cones.push({ x: p.x, y: p.y, dir: data.dir, range: data.range, arc: data.arc, age: 0, life: 0.28, accent: data.accent });
+        this.shakeT = 80; this.shakeMag = data.accent ? 4 : 2.5;
         break;
       case 'kill': {
         const color = ENEMIES[data.type]?.color ?? '#ffffff';
@@ -119,19 +132,20 @@ class Renderer {
 
     ctx.globalCompositeOperation = 'lighter';
 
-    // XPジェム
+    // XPジェム（ビートで跳ねる）
+    const gemS = 1 + pulse * 0.35;
     for (const g of game.gems) {
-      const bob = Math.sin(game.time * 5 + g.x) * 2;
+      const bob = Math.sin(game.time * 5 + g.x) * 2 - pulse * 3;
       ctx.fillStyle = 'rgba(80, 240, 220, 0.9)';
       ctx.beginPath();
-      ctx.moveTo(g.x, g.y - 6 + bob); ctx.lineTo(g.x + 4.5, g.y + bob);
-      ctx.lineTo(g.x, g.y + 6 + bob); ctx.lineTo(g.x - 4.5, g.y + bob);
+      ctx.moveTo(g.x, g.y - 6 * gemS + bob); ctx.lineTo(g.x + 4.5 * gemS, g.y + bob);
+      ctx.lineTo(g.x, g.y + 6 * gemS + bob); ctx.lineTo(g.x - 4.5 * gemS, g.y + bob);
       ctx.fill();
     }
 
-    // レーザー
+    // レーザー（GROOVEティア反映）
     if (game.weapons.laser) {
-      const conf = WEAPONS.laser.lv[game.weapons.laser - 1];
+      const conf = game.laserConf();
       const halfFrac = ((game.beat * 2) % 1 + 1) % 1;
       const lp = Math.max(0.35, 1 - halfFrac * 2);
       for (const ang of game.laserAngles()) {
@@ -172,12 +186,13 @@ class Renderer {
       }
     }
 
-    // 弾
+    // 弾（ビートで脈動）
+    const bulletS = 1 + pulse * 0.35;
     for (const b of game.bullets) {
       ctx.fillStyle = 'rgba(255, 240, 180, 0.95)';
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r * bulletS, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = 'rgba(255, 200, 80, 0.35)';
-      ctx.beginPath(); ctx.arc(b.x - b.vx * 0.012, b.y - b.vy * 0.012, b.r * 1.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(b.x - b.vx * 0.012, b.y - b.vy * 0.012, b.r * 1.8 * bulletS, 0, Math.PI * 2); ctx.fill();
     }
 
     // サブウーファー扇形
@@ -185,7 +200,7 @@ class Renderer {
     for (const c of this.cones) {
       c.age += dt;
       const a = 1 - c.age / c.life;
-      ctx.fillStyle = `rgba(255, 140, 66, ${0.3 * a})`;
+      ctx.fillStyle = c.accent ? `rgba(255, 210, 62, ${0.4 * a})` : `rgba(255, 140, 66, ${0.3 * a})`;
       ctx.beginPath();
       ctx.moveTo(c.x, c.y);
       ctx.arc(c.x, c.y, c.range * (0.4 + 0.6 * (c.age / c.life)), c.dir - c.arc / 2, c.dir + c.arc / 2);
@@ -227,6 +242,12 @@ class Renderer {
       if (game.groove > 0) {
         ctx.fillStyle = `rgba(255, 210, 62, ${0.05 + grooveN * 0.12 + pulse * 0.06})`;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 10 + grooveN * 18, 0, Math.PI * 2); ctx.fill();
+      }
+      // アクセント中（PERFECT直後）は黄金のオーラ
+      if (game.isAccent()) {
+        ctx.strokeStyle = `rgba(255, 210, 62, ${0.5 + pulse * 0.4})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 8 + pulse * 6, 0, Math.PI * 2); ctx.stroke();
       }
       const blink = p.iframe > 0 && Math.floor(game.time * 20) % 2 === 0;
       ctx.fillStyle = blink ? 'rgba(255,255,255,0.5)' : '#eafcff';

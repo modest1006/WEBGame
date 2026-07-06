@@ -50,7 +50,9 @@ class Music {
     while (true) {
       const t = this.anchorTime + (this.nextStep / 4 - this.anchorBeat) * beatSec;
       if (t > now + 0.18) break;
-      if (t >= now - 0.02 && this.game.state === 'playing') this.playStep(this.nextStep, Math.max(t, now + 0.001));
+      const st = this.game.state;
+      // levelup中も曲を止めない（体験をぶつ切りにしない）
+      if (t >= now - 0.02 && (st === 'playing' || st === 'levelup')) this.playStep(this.nextStep, Math.max(t, now + 0.001));
       this.nextStep++;
     }
   }
@@ -197,6 +199,17 @@ class Music {
       case 'levelup':
         [523, 659, 784, 1047].forEach((f, i) => this.pluck(t + i * 0.07, f, 0.15));
         break;
+      case 'cardin': {
+        // カード登場の「ドン」（タム風）
+        const o = this.ctx.createOscillator();
+        o.type = 'sine';
+        o.frequency.setValueAtTime(220, t);
+        o.frequency.exponentialRampToValueAtTime(90, t + 0.12);
+        o.connect(this.env(t, 0.16, 0.5));
+        o.start(t); o.stop(t + 0.18);
+        this.noise({ dur: 0.05, gain: 0.05, freq: 1800 });
+        break;
+      }
       case 'boss': {
         const o = this.ctx.createOscillator();
         o.type = 'sawtooth'; o.frequency.setValueAtTime(80, t);

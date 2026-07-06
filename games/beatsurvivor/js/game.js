@@ -37,6 +37,8 @@ class Game {
     this.pendingLevels = 0;
     this.choices = [];
     this.spawnAcc = 0;
+    this.accentUntil = 0;   // このビートまで全攻撃がアクセント（PERFECTで更新）
+    this.echoQueue = [];    // ビート境界で発動する残響攻撃（ノヴァ2連など）
     this.bossSpawned = false;
     this.bossRef = null;
     this.nextId = 1;
@@ -54,7 +56,10 @@ class Game {
   }
 
   grooveMult() { return 1 + Math.min(this.groove, GROOVE_MAX) * GROOVE_STEP; }
+  tier() { return grooveTierOf(this.groove); }
+  isAccent() { return this.beat < this.accentUntil; }
   dmgMult() { return this.grooveMult() * (1 + this.passives.amp * 0.15); }
+  attackMult() { return this.dmgMult() * (this.isAccent() ? ACCENT_MULT : 1); }
   moveSpeed() { return PLAYER.speed * (1 + this.passives.footwork * 0.12); }
   pickupR() { return PLAYER.pickupRadius * (1 + this.passives.speaker * 0.45); }
   perfectWindow() { return PERFECT_MS + this.passives.metronome * 25; }
@@ -73,6 +78,8 @@ class Game {
       this.stats.perfect++;
       this.stats.maxGroove = Math.max(this.stats.maxGroove, this.groove);
       this.lastPerfectBeat = this.beat;
+      // PERFECT直後はしばらく全攻撃がアクセント（強化）される
+      this.accentUntil = Math.floor(this.beat) + ACCENT_BEATS;
       // PERFECTダッシュは小衝撃波つき
       this.areaDamage(p.x, p.y, 100, 10 * this.dmgMult(), 160);
     } else if (abs <= GOOD_MS) {
@@ -99,10 +106,11 @@ class Game {
 
   // ===== 更新 =====
   update(dtMs) {
-    if (this.state !== 'playing') return;
+    // levelup中もビートクロックだけは進める（音楽と演出を止めないため）
+    if (this.state !== 'playing' && this.state !== 'levelup') return;
     let acc = Math.min(dtMs, 100) / 1000;
     const STEP = 1 / 120;
-    while (acc > 0 && this.state === 'playing') {
+    while (acc > 0 && (this.state === 'playing' || this.state === 'levelup')) {
       const h = Math.min(acc, STEP);
       this.tick(h);
       acc -= h;
@@ -120,6 +128,8 @@ class Game {
       this.onHalfTick(this.halfTick);
     }
 
+    if (this.state !== 'playing') return; // levelup中はビートのみ進行
+
     this.updatePlayer(dt);
     this.updateEnemies(dt);
     this.updateBullets(dt);
@@ -131,6 +141,18 @@ class Game {
 
   onHalfTick(ht) {
     const onBeat = ht % 2 === 0;
+    // levelup中はゲームプレイを発動せず、演出用のビートイベントだけ流す
+    if (this.state === 'levelup') {
+      this.emit(onBeat ? 'beat' : 'halfbeat', { index: ht / 2, ht });
+      return;
+    }
+    // 残響攻撃（ノヴァ2連など）はビート境界で発動
+    this.echoQueue = this.echoQueue.filter((e) => {
+      if (ht < e.at) return true;
+      this.areaDamage(e.x, e.y, e.radius, e.dmg, e.kb);
+      this.emit('nova', { radius: e.radius, echo: true });
+      return false;
+    });
     // レーザーは8分音符ごと
     if (this.weapons.laser) this.fireLaser();
     if (!onBeat) { this.emit('halfbeat', { ht }); return; }
@@ -322,7 +344,10 @@ class Game {
 
   fireBeatshot() {
     const conf = WEAPONS.beatshot.lv[this.weapons.beatshot - 1];
-    const targets = this.nearestEnemies(conf.count);
+    const tier = this.tier();
+    const accent = this.isAccent();
+    const count = conf.count + (tier >= 1 ? 1 : 0); // ティア1+: 弾数+1
+    const targets = this.nearestEnemies(count);
     if (targets.length === 0) return;
     for (const t of targets) {
       const dx = t.x - this.p.x, dy = t.y - this.p.y;
@@ -330,44 +355,69 @@ class Game {
       this.bullets.push({
         x: this.p.x, y: this.p.y,
         vx: (dx / d) * 540, vy: (dy / d) * 540,
-        dmg: conf.dmg * this.dmgMult(), life: 1.4, r: 5,
+        dmg: conf.dmg * this.attackMult(), life: 1.4,
+        r: accent ? 7.5 : 5,
+        pierce: tier >= 3 ? 2 : 1, // ティア3+: 貫通
       });
     }
-    this.emit('shot', { count: targets.length });
+    this.emit('shot', { count: targets.length, accent });
   }
 
   fireNova() {
     const conf = WEAPONS.nova.lv[this.weapons.nova - 1];
-    this.areaDamage(this.p.x, this.p.y, conf.radius, conf.dmg * this.dmgMult(), 140);
-    this.emit('nova', { radius: conf.radius });
+    const accent = this.isAccent();
+    this.areaDamage(this.p.x, this.p.y, conf.radius, conf.dmg * this.attackMult(), 140);
+    this.emit('nova', { radius: conf.radius, accent });
+    // ティア2+: 半拍遅れの2発目（残響）
+    if (this.tier() >= 2) {
+      this.echoQueue.push({
+        at: this.halfTick + 1, x: this.p.x, y: this.p.y,
+        radius: conf.radius * 0.8, dmg: conf.dmg * 0.6 * this.attackMult(), kb: 100,
+      });
+    }
   }
 
   fireBass() {
     const conf = WEAPONS.bass.lv[this.weapons.bass - 1];
+    const tier = this.tier();
+    const accent = this.isAccent();
+    const arc = conf.arc * (tier >= 1 ? 1.2 : 1);     // ティア1+: 幅+20%
+    const range = conf.range * (tier >= 3 ? 1.3 : 1); // ティア3+: 射程+30%
     const p = this.p;
     const dir = p.facing;
     for (const e of [...this.enemies]) {
       const dx = e.x - p.x, dy = e.y - p.y;
       const d = Math.hypot(dx, dy);
-      if (d > conf.range + e.r) continue;
+      if (d > range + e.r) continue;
       let da = Math.atan2(dy, dx) - dir;
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
-      if (Math.abs(da) <= conf.arc / 2) {
-        this.damageEnemy(e, conf.dmg * this.dmgMult(), (dx / d) * conf.kb, (dy / d) * conf.kb);
+      if (Math.abs(da) <= arc / 2) {
+        this.damageEnemy(e, conf.dmg * this.attackMult(), (dx / d) * conf.kb, (dy / d) * conf.kb);
       }
     }
-    this.emit('bass', { dir, range: conf.range, arc: conf.arc });
+    this.emit('bass', { dir, range, arc, accent });
+  }
+
+  // GROOVEティアを反映したレーザー構成（描画側もこれを使う）
+  laserConf() {
+    const conf = WEAPONS.laser.lv[this.weapons.laser - 1];
+    const tier = this.tier();
+    return {
+      beams: conf.beams + (tier >= 2 ? 1 : 0),        // ティア2+: ビーム+1
+      len: conf.len * (tier >= 4 ? 1.4 : 1),          // ティア4: 長さ+40%
+      dmg: conf.dmg,
+    };
   }
 
   laserAngles() {
-    const conf = WEAPONS.laser.lv[this.weapons.laser - 1];
+    const conf = this.laserConf();
     const base = this.beat * 0.9; // ビートと共に回転
     return Array.from({ length: conf.beams }, (_, i) => base + (Math.PI * 2 * i) / conf.beams);
   }
 
   fireLaser() {
-    const conf = WEAPONS.laser.lv[this.weapons.laser - 1];
+    const conf = this.laserConf();
     const p = this.p;
     for (const ang of this.laserAngles()) {
       const cs = Math.cos(ang), sn = Math.sin(ang);
@@ -376,7 +426,7 @@ class Game {
         const along = dx * cs + dy * sn;         // ビーム方向の距離
         if (along < 0 || along > conf.len) continue;
         const across = Math.abs(-dx * sn + dy * cs); // ビームからの垂直距離
-        if (across < e.r + 7) this.damageEnemy(e, conf.dmg * this.dmgMult());
+        if (across < e.r + 7) this.damageEnemy(e, conf.dmg * this.attackMult());
       }
     }
   }
@@ -392,7 +442,8 @@ class Game {
           const dx = e.x - b.x, dy = e.y - b.y;
           if (dx * dx + dy * dy < (e.r + b.r) ** 2) {
             this.damageEnemy(e, b.dmg, b.vx * 0.06, b.vy * 0.06);
-            dead = true;
+            b.pierce = (b.pierce ?? 1) - 1;
+            if (b.pierce <= 0) dead = true;
             break;
           }
         }
@@ -480,7 +531,12 @@ class Game {
     this.pendingLevels--;
     this.emit('levelup-pick', { choice: c });
     if (this.pendingLevels > 0) this.openLevelUp();
-    else { this.state = 'playing'; this.choices = []; }
+    else {
+      this.state = 'playing';
+      this.choices = [];
+      // levelup中に経過したビートでGROOVEが即減衰しないように猶予をリセット
+      this.lastPerfectBeat = this.beat;
+    }
     return true;
   }
 
@@ -503,6 +559,7 @@ class Game {
       pos: { x: Math.round(this.p.x), y: Math.round(this.p.y) },
       level: this.level, xp: this.xp, xpNext: xpForLevel(this.level),
       groove: this.groove, grooveMult: Math.round(this.grooveMult() * 100) / 100,
+      tier: this.tier(), accent: this.isAccent(),
       kills: this.kills, stats: { ...this.stats },
       enemies: this.enemies.length, bullets: this.bullets.length, gems: this.gems.length,
       weapons: { ...this.weapons }, passives: { ...this.passives },

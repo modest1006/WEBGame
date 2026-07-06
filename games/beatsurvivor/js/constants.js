@@ -6,6 +6,11 @@ const GOOD_MS = 150;                   // GOOD（GROOVE維持）
 const GROOVE_STEP = 0.15;              // GROOVE 1につき火力+15%
 const GROOVE_MAX = 20;                 // 倍率上限 = 1 + 20*0.15 = 4.0x
 const GROOVE_DECAY_BEATS = 8;          // PERFECTなしでこのビート数経過すると1ずつ減衰
+// GROOVEティア（5毎に武器が進化）: 1=ビートショット+1弾 / 2=レーザー+1本＆ノヴァ2連 /
+// 3=ビートショット貫通＆サブウーファー射程拡大 / 4=レーザー延長
+const grooveTierOf = (groove) => Math.floor(Math.min(groove, GROOVE_MAX) / 5);
+const ACCENT_MULT = 1.5;               // PERFECT直後1ビートの全攻撃倍率
+const ACCENT_BEATS = 2;                // PERFECTから何ビート先までアクセント扱いか
 
 // ===== プレイヤー =====
 const PLAYER = {
@@ -15,9 +20,9 @@ const PLAYER = {
   pickupRadius: 70,
   collectRadius: 26,
   hurtCooldown: 0.6,
-  dashDist: 150,
-  dashPerfectDist: 190,
-  dashTime: 0.16,
+  dashDist: 90,          // 短い「ビートステップ」（画面が飛びすぎない距離）
+  dashPerfectDist: 125,
+  dashTime: 0.18,
   dashIframe: 0.3,
   dashCooldown: 0.3,
 };

@@ -9,7 +9,8 @@ function installDebug(game) {
     const wasPaused = game.state === 'paused';
     if (wasPaused) game.state = 'playing';
     let rest = ms;
-    while (rest > 0 && game.state === 'playing') {
+    // levelup中もビートクロックが進むので step 可能にする
+    while (rest > 0 && (game.state === 'playing' || game.state === 'levelup')) {
       const d = Math.min(rest, 1000 / 60);
       game.update(d);
       rest -= d;

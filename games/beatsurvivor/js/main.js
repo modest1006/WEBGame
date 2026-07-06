@@ -54,9 +54,12 @@ function syncOverlay() {
   }
 }
 
+// レベルアップカードはビートに合わせて1枚ずつ「ドン」と登場する
+let cardQueue = [];
 function renderLevelup(choices) {
   const box = $('levelup-cards');
   box.innerHTML = '';
+  cardQueue = [];
   choices.forEach((c, i) => {
     const btn = document.createElement('button');
     btn.className = 'card';
@@ -66,12 +69,36 @@ function renderLevelup(choices) {
       + `<span class="card-key">${i + 1}</span>`;
     btn.addEventListener('pointerdown', (e) => { e.preventDefault(); actions.pick(i); });
     box.appendChild(btn);
+    cardQueue.push(btn);
   });
+}
+
+function onBeatUI() {
+  // GROOVEメーターは常にビートで脈動
+  const gb = document.querySelector('.groove-box');
+  gb.classList.remove('beatpulse');
+  void gb.offsetWidth;
+  gb.classList.add('beatpulse');
+  if (game.state !== 'levelup') return;
+  const next = cardQueue.find((c) => !c.classList.contains('in'));
+  if (next) {
+    // 次のカードをドンと出す
+    next.classList.add('in');
+    music.sfx('cardin');
+  } else {
+    // 全部出たらビートで振動し続ける
+    for (const c of document.querySelectorAll('#levelup-cards .card')) {
+      c.classList.remove('thump');
+      void c.offsetWidth;
+      c.classList.add('thump');
+    }
+  }
 }
 
 game.on((type, data) => {
   renderer.handleEvent(type, data, game);
   switch (type) {
+    case 'beat': onBeatUI(); break;
     case 'dash': music.sfx(data.judge, data); break;
     case 'kill': music.sfx('kill'); break;
     case 'hurt': music.sfx('hurt'); break;
