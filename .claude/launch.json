@@ -20,6 +20,12 @@
       "port": 8126
     },
     {
+      "name": "neondrive",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8127", "--directory", "games/neondrive"],
+      "port": 8127
+    },
+    {
       "name": "bunnyhop",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8124", "--directory", "games/bunnyhop"],

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NEON DRIVE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+JP:wght@500;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+  <main class="game-shell">
+    <canvas id="view" aria-label="NEON DRIVE game canvas"></canvas>
+
+    <header class="hud">
+      <section class="speed-box">
+        <span class="label">KM/H</span>
+        <b id="hud-speed">000</b>
+      </section>
+      <section class="stat-grid">
+        <div><span>TIME</span><b id="hud-time">55.0</b></div>
+        <div><span>SCORE</span><b id="hud-score">0</b></div>
+        <div><span>DIST</span><b id="hud-distance">0m</b></div>
+        <div><span>BOOST</span><b id="boost-text">0%</b></div>
+      </section>
+      <section class="boost-box">
+        <div class="boost-track"><div id="boost-fill"></div></div>
+        <p id="hud-combo"></p>
+        <small id="hud-best">BEST 0 / 0m</small>
+      </section>
+      <section class="top-buttons">
+        <button class="hud-btn" id="mute-btn" data-action="mute" aria-label="Mute">SOUND</button>
+        <button class="hud-btn" data-action="pause" aria-label="Pause">PAUSE</button>
+        <button class="hud-btn" data-action="restart" aria-label="Restart">RESTART</button>
+      </section>
+    </header>
+
+    <div class="touch-controls">
+      <button class="touch-btn left" aria-label="Steer left">LEFT</button>
+      <button class="touch-btn right" aria-label="Steer right">RIGHT</button>
+      <button class="touch-btn brake" aria-label="Brake">BRAKE</button>
+      <button class="touch-btn boost" data-action="boost" aria-label="Boost">BOOST</button>
+    </div>
+
+    <div id="overlay" class="overlay">
+      <h1 id="overlay-title">NEON<br>DRIVE</h1>
+      <p id="overlay-sub">Press Space or tap BOOST to run the night</p>
+    </div>
+  </main>
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+
+  <script src="js/constants.js?v=1"></script>
+  <script src="js/rng.js?v=1"></script>
+  <script src="js/game.js?v=1"></script>
+  <script src="js/renderer.js?v=1"></script>
+  <script src="js/input.js?v=1"></script>
+  <script src="js/music.js?v=1"></script>
+  <script src="js/debug.js?v=1"></script>
+  <script src="js/main.js?v=1"></script>
+</body>
+</html>
