@@ -14,6 +14,12 @@
       "port": 8125
     },
     {
+      "name": "cosmicmerge",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8126", "--directory", "games/cosmicmerge"],
+      "port": 8126
+    },
+    {
       "name": "bunnyhop",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8124", "--directory", "games/bunnyhop"],

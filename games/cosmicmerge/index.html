@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>COSMIC MERGE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+JP:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+  <main class="shell">
+    <canvas id="view" aria-label="COSMIC MERGE game canvas"></canvas>
+    <header class="hud">
+      <section class="score-panel">
+        <span>SCORE</span><b id="score">0</b>
+        <em>BEST <strong id="best">0</strong></em>
+      </section>
+      <section class="brand">
+        <h1>COSMIC MERGE</h1>
+        <p id="hint">Aim with mouse / click to drop</p>
+      </section>
+      <section class="next-panel">
+        <span>NEXT</span>
+        <canvas id="next-canvas" width="112" height="86"></canvas>
+      </section>
+      <section class="buttons">
+        <button class="icon-btn" data-action="mute" id="mute-btn" aria-label="Mute">♪</button>
+        <button class="icon-btn" data-action="restart" aria-label="Restart">↻</button>
+      </section>
+    </header>
+    <div class="chain" id="chain"></div>
+    <div class="combo" id="combo"></div>
+    <div class="overlay" id="overlay">
+      <h2 id="overlay-title">COSMIC<br>MERGE</h2>
+      <p id="overlay-sub">Click, press Space, or tap to begin</p>
+    </div>
+  </main>
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+
+  <script src="js/constants.js?v=1"></script>
+  <script src="js/rng.js?v=1"></script>
+  <script src="js/game.js?v=1"></script>
+  <script src="js/music.js?v=1"></script>
+  <script src="js/renderer.js?v=1"></script>
+  <script src="js/input.js?v=1"></script>
+  <script src="js/debug.js?v=1"></script>
+  <script src="js/main.js?v=1"></script>
+</body>
+</html>
