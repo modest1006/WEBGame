@@ -16,6 +16,8 @@ const WORLD = {
   friction: 0.55,
   sleepSpeed: 7,
   sleepAngular: 0.08,
+  spinDrag: 0.9,   // 角速度の減衰/秒（無いと接触摩擦でspinが無限に加速する）
+  spinMax: 2.2,    // 角速度上限 rad/s
   maxBodies: 90,
 };
 

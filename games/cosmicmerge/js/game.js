@@ -74,6 +74,8 @@ class Game {
       r: def.r, mass, invMass: 1 / mass,
       angle: this.rng.range(0, Math.PI * 2),
       spin: this.rng.range(-0.18, 0.18),
+      idleSpin: this.rng.range(0.1, 0.3) * (this.rng.next() < 0.5 ? -1 : 1), // 常時の緩やかな自転
+
       age: 0, sleep: 0, dead: false,
       aboveTime: 0,
       justMerged: 0,
@@ -117,10 +119,12 @@ class Game {
       b.vy *= drag;
       b.x += b.vx * dt;
       b.y += b.vy * dt;
+      // spinはアイドル自転値へ減衰（0にせず生命感を残す。減衰なしだと摩擦で無限加速する）
+      b.spin = clamp(b.idleSpin + (b.spin - b.idleSpin) * Math.max(0, 1 - WORLD.spinDrag * dt), -WORLD.spinMax, WORLD.spinMax);
       b.angle += b.spin * dt;
-      if (Math.hypot(b.vx, b.vy) < WORLD.sleepSpeed && Math.abs(b.spin) < WORLD.sleepAngular && b.y > WORLD.top + 80) {
-        b.vx *= 0.88; b.vy *= 0.88; b.spin *= 0.82; b.sleep += dt;
-        if (b.sleep > 0.6) { b.vx = 0; b.vy = 0; b.spin = 0; }
+      if (Math.hypot(b.vx, b.vy) < WORLD.sleepSpeed && b.y > WORLD.top + 80) {
+        b.vx *= 0.88; b.vy *= 0.88; b.sleep += dt;
+        if (b.sleep > 0.6) { b.vx = 0; b.vy = 0; }
       } else {
         b.sleep = 0;
       }
@@ -166,7 +170,7 @@ class Game {
       const vt = b.vx * tx + b.vy * ty;
       b.vx -= tx * vt * WORLD.friction * 0.08;
       b.vy -= ty * vt * WORLD.friction * 0.08;
-      b.spin += vt / Math.max(20, b.r) * 0.02;
+      if (Math.abs(vt) > 40) b.spin += vt / Math.max(20, b.r) * 0.02;
       if (Math.abs(vn) > 100) this.emit('hit', { x: b.x, y: b.y, tier: b.tier, power: Math.abs(vn) });
     }
   }
@@ -189,8 +193,10 @@ class Game {
     const jt = clamp(-vt / inv, -j * WORLD.friction, j * WORLD.friction);
     a.vx -= jt * tx * a.invMass; a.vy -= jt * ty * a.invMass;
     b.vx += jt * tx * b.invMass; b.vy += jt * ty * b.invMass;
-    a.spin -= jt / Math.max(18, a.r) * 0.03;
-    b.spin += jt / Math.max(18, b.r) * 0.03;
+    if (Math.abs(vt) > 40) { // 実際に滑っている接触のみ回転を与える（静止山での摩擦ポンプ防止）
+      a.spin -= jt / Math.max(18, a.r) * 0.03;
+      b.spin += jt / Math.max(18, b.r) * 0.03;
+    }
   }
 
   handleMerges(pairs) {
@@ -304,6 +310,7 @@ class Game {
         id: b.id, tier: b.tier,
         x: Math.round(b.x * 10) / 10, y: Math.round(b.y * 10) / 10,
         vx: Math.round(b.vx * 10) / 10, vy: Math.round(b.vy * 10) / 10,
+        spin: Math.round(b.spin * 100) / 100,
       })),
     };
   }
