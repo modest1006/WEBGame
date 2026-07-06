@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "arcade-root",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8120"],
+      "port": 8120
+    },
+    {
+      "name": "beatsurvivor",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8125", "--directory", "games/beatsurvivor"],
+      "port": 8125
+    },
+    {
+      "name": "bunnyhop",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8124", "--directory", "games/bunnyhop"],
+      "port": 8124
+    },
+    {
+      "name": "tetris",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8123", "--directory", "games/tetris"],
+      "port": 8123
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NEON TETRIS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <header class="topbar">
+    <h1 class="logo">NEON<span>TETRIS</span></h1>
+    <div class="topbar-btns">
+      <button class="icon-btn" id="mute-btn" data-action="mute" aria-label="ミュート">🔊</button>
+      <button class="icon-btn" data-action="pause" aria-label="ポーズ">⏸</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <aside class="panel panel-left">
+      <section class="box">
+        <h2>HOLD</h2>
+        <canvas id="hold" class="mini-canvas hold-canvas"></canvas>
+      </section>
+      <section class="box stats">
+        <h2>SCORE</h2>
+        <p class="stat" id="score">0</p>
+        <h2>LINES</h2>
+        <p class="stat" id="lines">0</p>
+        <h2>LEVEL</h2>
+        <p class="stat" id="level">1</p>
+      </section>
+    </aside>
+
+    <div class="board-wrap">
+      <canvas id="board"></canvas>
+      <div id="popup" class="popup"></div>
+      <div id="overlay" class="overlay">
+        <p id="overlay-title" class="overlay-title"></p>
+        <p id="overlay-sub" class="overlay-sub"></p>
+      </div>
+    </div>
+
+    <aside class="panel panel-right">
+      <section class="box">
+        <h2>NEXT</h2>
+        <canvas id="next" class="mini-canvas next-canvas"></canvas>
+      </section>
+    </aside>
+  </main>
+
+  <nav class="touch-controls" aria-label="タッチ操作">
+    <div class="tc-cluster">
+      <button class="tc-btn" data-action="left">◀</button>
+      <button class="tc-btn" data-action="down">▼</button>
+      <button class="tc-btn" data-action="right">▶</button>
+    </div>
+    <div class="tc-cluster">
+      <button class="tc-btn tc-small" data-action="hold">H</button>
+      <button class="tc-btn" data-action="rotccw">⟲</button>
+      <button class="tc-btn" data-action="rotate">⟳</button>
+      <button class="tc-btn tc-accent" data-action="drop">⤓</button>
+    </div>
+  </nav>
+
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+
+  <!-- file:// 直開きでも動くよう ES modules ではなく通常スクリプトを順序読み込み -->
+  <script src="js/constants.js"></script>
+  <script src="js/rng.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/debug.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

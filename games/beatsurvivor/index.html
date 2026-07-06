@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BEAT SURVIVOR</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;900&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="game-area">
+    <canvas id="view"></canvas>
+
+    <header class="hud-top">
+      <div class="hud-left">
+        <div class="bar hp"><div class="bar-fill" id="hp-fill"></div><span class="bar-text" id="hp-text">100</span></div>
+        <div class="bar xp"><div class="bar-fill" id="xp-fill"></div></div>
+        <div class="hud-row">
+          <span class="hud-chip">Lv <b id="hud-level">1</b></span>
+          <span class="hud-chip">☠ <b id="hud-kills">0</b></span>
+        </div>
+      </div>
+      <div class="hud-center">
+        <span class="hud-time" id="hud-time">0:00</span>
+        <div class="bar boss hidden" id="boss-bar"><div class="bar-fill" id="boss-fill"></div></div>
+      </div>
+      <div class="hud-right">
+        <div class="groove-box">
+          <span class="groove-label">GROOVE <b id="groove-num">0</b></span>
+          <div class="bar groove"><div class="bar-fill" id="groove-fill"></div></div>
+          <span class="groove-mult" id="groove-mult">×1.00</span>
+        </div>
+        <div class="topbar-btns">
+          <button class="icon-btn" id="mute-btn" data-action="mute" aria-label="ミュート">🔊</button>
+          <button class="icon-btn" data-action="restart" aria-label="リスタート">↺</button>
+          <button class="icon-btn" data-action="pause" aria-label="ポーズ">⏸</button>
+        </div>
+      </div>
+    </header>
+
+    <div id="levelup" class="levelup hidden">
+      <p class="levelup-title">LEVEL UP! — 強化を選べ</p>
+      <div class="levelup-cards" id="levelup-cards"></div>
+    </div>
+
+    <div id="overlay" class="overlay">
+      <p id="overlay-title" class="overlay-title"></p>
+      <p id="overlay-sub" class="overlay-sub"></p>
+    </div>
+
+    <div id="stick-base" class="stick-base hidden"><div id="stick-knob" class="stick-knob"></div></div>
+    <div class="touch-hint">左半分ドラッグ:移動　右半分タップ:ダッシュ</div>
+  </main>
+
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+
+  <!-- file:// 直開きでも動くよう ES modules ではなく通常スクリプトを順序読み込み -->
+  <script src="js/constants.js"></script>
+  <script src="js/rng.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/music.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/debug.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

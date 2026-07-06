@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BUNNY DASH</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1 class="logo">🐇 BUNNY<span>DASH</span></h1>
+    <div class="hud">
+      <div class="hud-item"><span class="hud-label">TIME</span><span class="hud-value" id="hud-time">0:00.00</span></div>
+      <div class="hud-item speed">
+        <span class="hud-label">SPEED <b id="hud-speed">0</b></span>
+        <div class="speed-track"><div class="speed-fill" id="speed-bar"></div></div>
+      </div>
+      <div class="hud-item"><span class="hud-label">🥕</span><span class="hud-value" id="hud-carrots">0/0</span></div>
+      <span class="combo" id="hud-combo"></span>
+    </div>
+    <div class="topbar-btns">
+      <button class="icon-btn" id="mute-btn" data-action="mute" aria-label="ミュート">🔊</button>
+      <button class="icon-btn" data-action="restart" aria-label="リスタート">↺</button>
+      <button class="icon-btn" data-action="pause" aria-label="ポーズ">⏸</button>
+    </div>
+  </header>
+
+  <main class="game-area">
+    <canvas id="view"></canvas>
+    <div id="overlay" class="overlay">
+      <p id="overlay-title" class="overlay-title"></p>
+      <p id="overlay-sub" class="overlay-sub"></p>
+    </div>
+  </main>
+
+  <nav class="touch-controls" aria-label="タッチ操作">
+    <div class="tc-cluster">
+      <button class="tc-btn" data-action="left">◀</button>
+      <button class="tc-btn" data-action="right">▶</button>
+    </div>
+    <div class="tc-cluster">
+      <button class="tc-btn tc-wide" data-action="slide">スライド</button>
+      <button class="tc-btn tc-accent tc-wide" data-action="jump">ジャンプ</button>
+    </div>
+  </nav>
+
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+
+  <!-- file:// 直開きでも動くよう ES modules ではなく通常スクリプトを順序読み込み -->
+  <script src="js/constants.js"></script>
+  <script src="js/level.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/debug.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WEB GAME ARCADE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;900&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0818;
+      --panel: rgba(28, 22, 56, 0.8);
+      --edge: rgba(130, 110, 255, 0.35);
+      --cyan: #3be8f0;
+      --magenta: #f04dd8;
+      --yellow: #ffd23e;
+      --text: #eafcff;
+      --dim: #8f9bd0;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse 70% 50% at 20% 0%, rgba(59, 232, 240, 0.08), transparent),
+        radial-gradient(ellipse 60% 50% at 85% 100%, rgba(240, 77, 216, 0.08), transparent),
+        var(--bg);
+      color: var(--text);
+      font-family: 'M PLUS Rounded 1c', sans-serif;
+      font-weight: 700;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 20px;
+    }
+    h1 {
+      font-family: 'Orbitron', monospace;
+      font-size: clamp(28px, 6vw, 48px);
+      font-weight: 800;
+      letter-spacing: 6px;
+      background: linear-gradient(135deg, var(--cyan), var(--magenta));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      filter: drop-shadow(0 0 18px rgba(240, 77, 216, 0.4));
+    }
+    .sub { color: var(--dim); font-size: 13px; margin: 10px 0 40px; letter-spacing: 1px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 320px));
+      gap: 20px;
+      justify-content: center;
+      width: 100%;
+      max-width: 1060px;
+    }
+    .card {
+      display: block;
+      background: var(--panel);
+      border: 1px solid var(--edge);
+      border-radius: 16px;
+      padding: 22px;
+      text-decoration: none;
+      color: var(--text);
+      transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+    }
+    .card:hover {
+      transform: translateY(-5px);
+      border-color: var(--accent, var(--cyan));
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 24px color-mix(in srgb, var(--accent, var(--cyan)) 30%, transparent);
+    }
+    .thumb {
+      height: 120px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Orbitron', monospace;
+      font-size: 34px;
+      font-weight: 800;
+      letter-spacing: 2px;
+    }
+    .card h2 { font-size: 19px; font-weight: 900; margin-bottom: 6px; }
+    .card h2 span { color: var(--accent, var(--cyan)); }
+    .card p { font-size: 12.5px; color: var(--dim); line-height: 1.8; font-weight: 700; }
+    .tags { margin-top: 12px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .tag {
+      font-size: 10.5px;
+      color: var(--accent, var(--cyan));
+      border: 1px solid color-mix(in srgb, var(--accent, var(--cyan)) 50%, transparent);
+      border-radius: 20px;
+      padding: 2px 10px;
+    }
+    footer { margin-top: 48px; color: var(--dim); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <h1>WEB GAME ARCADE</h1>
+  <p class="sub">ぜんぶブラウザでそのまま遊べます — PC・スマホ両対応</p>
+
+  <div class="grid">
+    <a class="card" href="games/tetris/" style="--accent: #3be8f0">
+      <div class="thumb" style="background: linear-gradient(135deg, #0b0e22, #131a40); color: #3be8f0; text-shadow: 0 0 16px #3be8f0">TETRIS</div>
+      <h2>NEON <span>TETRIS</span></h2>
+      <p>ネオンアーケードなテトリス。SRS回転・7-bag・ホールド・B2B/コンボ採点。</p>
+      <div class="tags"><span class="tag">パズル</span><span class="tag">スコアアタック</span></div>
+    </a>
+
+    <a class="card" href="games/bunnyhop/" style="--accent: #ff8c42">
+      <div class="thumb" style="background: linear-gradient(135deg, #2b1a4e, #e8703a); color: #ffe9c8; text-shadow: 0 0 16px #ff8c42">🐇 DASH</div>
+      <h2>BUNNY <span>DASH</span></h2>
+      <p>夕焼けキャニオンを疾走する2Dアクション。スライディング着地→即ジャンプの「バニーホップ」で加速を重ねてタイムを削れ。</p>
+      <div class="tags"><span class="tag">アクション</span><span class="tag">タイムアタック</span></div>
+    </a>
+
+    <a class="card" href="games/beatsurvivor/" style="--accent: #f04dd8">
+      <div class="thumb" style="background: linear-gradient(135deg, #06040f, #2a0f3d); color: #f04dd8; text-shadow: 0 0 16px #f04dd8">BEAT ♪</div>
+      <h2>BEAT <span>SURVIVOR</span></h2>
+      <p>ネオンサバイバー×リズム。攻撃は全部ビート同期、ビートに乗ってダッシュすればGROOVEで火力最大4倍。曲はプロシージャル生成。</p>
+      <div class="tags"><span class="tag">サバイバー</span><span class="tag">リズム</span></div>
+    </a>
+  </div>
+
+  <footer>Built with Claude Code</footer>
+</body>
+</html>

@@ -1,0 +1,254 @@
+:root {
+  --bg: #241435;
+  --panel: rgba(48, 24, 56, 0.72);
+  --edge: rgba(255, 180, 110, 0.35);
+  --cream: #ffe9c8;
+  --orange: #ff8c42;
+  --yellow: #ffd23e;
+  --hot: #ff5d73;
+  --dim: #c9a08a;
+  --font: 'M PLUS Rounded 1c', 'Hiragino Maru Gothic ProN', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--cream);
+  font-family: var(--font);
+  font-weight: 700;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+body { display: flex; flex-direction: column; }
+
+/* ---- ヘッダー / HUD ---- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, rgba(30, 12, 40, 0.95), rgba(30, 12, 40, 0.7));
+  z-index: 10;
+}
+
+.logo {
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  color: var(--cream);
+  white-space: nowrap;
+}
+
+.logo span { color: var(--orange); }
+
+.hud {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex: 1;
+  min-width: 0;
+}
+
+.hud-item { display: flex; flex-direction: column; gap: 2px; }
+
+.hud-label { font-size: 10px; letter-spacing: 1.5px; color: var(--dim); }
+.hud-label b { color: var(--cream); font-size: 12px; }
+
+.hud-value {
+  font-size: 17px;
+  font-weight: 900;
+  color: var(--yellow);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-item.speed { width: 150px; }
+
+.speed-track {
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.speed-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--orange), var(--yellow));
+  transition: width 60ms linear;
+}
+
+.speed-fill.hot {
+  background: linear-gradient(90deg, var(--yellow), var(--hot));
+  box-shadow: 0 0 10px var(--hot);
+}
+
+.combo {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--yellow);
+  text-shadow: 0 2px 0 rgba(0,0,0,0.4);
+  min-width: 90px;
+}
+
+.combo.bump { animation: bump 0.25s ease-out; }
+
+@keyframes bump {
+  0% { transform: scale(1.5) rotate(-4deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+
+.topbar-btns { display: flex; gap: 6px; }
+
+.icon-btn {
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  color: var(--cream);
+  font-size: 15px;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.icon-btn:active { transform: scale(0.92); }
+
+/* ---- ゲーム画面 ---- */
+.game-area {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+#view {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+
+/* ---- オーバーレイ ---- */
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(30, 12, 40, 0.72);
+  backdrop-filter: blur(3px);
+  text-align: center;
+  z-index: 5;
+  padding: 20px;
+}
+
+.overlay.hidden { display: none; }
+
+.overlay-title {
+  font-size: clamp(34px, 7vh, 60px);
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: var(--yellow);
+  text-shadow:
+    0 4px 0 var(--orange),
+    0 8px 24px rgba(255, 140, 66, 0.5);
+  animation: bounce 1.6s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.overlay-sub {
+  font-size: 14px;
+  line-height: 2.1;
+  color: var(--cream);
+}
+
+.overlay-sub b { color: var(--yellow); }
+
+/* ---- タッチ操作 ---- */
+.touch-controls {
+  display: none;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px calc(10px + env(safe-area-inset-bottom));
+  gap: 10px;
+  background: rgba(30, 12, 40, 0.85);
+}
+
+.tc-cluster { display: flex; gap: 10px; }
+
+.tc-btn {
+  width: 64px;
+  height: 60px;
+  border-radius: 16px;
+  border: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--cream);
+  font-size: 22px;
+  font-family: var(--font);
+  font-weight: 900;
+  touch-action: none;
+}
+
+.tc-btn.tc-wide { width: 96px; font-size: 15px; }
+
+.tc-btn.tc-accent {
+  background: rgba(255, 140, 66, 0.3);
+  border-color: var(--orange);
+  color: var(--yellow);
+}
+
+.tc-btn.pressed {
+  background: rgba(255, 210, 62, 0.35);
+  transform: scale(0.94);
+}
+
+@media (pointer: coarse) {
+  .touch-controls { display: flex; }
+}
+
+/* ---- デバッグ ---- */
+.debug-overlay {
+  position: fixed;
+  top: 54px;
+  left: 8px;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.75);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  color: #ffcf9e;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  pointer-events: none;
+  white-space: pre;
+}
+
+.debug-overlay.hidden { display: none; }
+
+/* ---- モバイル ---- */
+@media (max-width: 640px) {
+  .topbar { gap: 8px; padding: 6px 8px; }
+  /* ゲーム名はタイトル画面で見えるためモバイルHUDでは省略 */
+  .logo { display: none; }
+  .hud { gap: 10px; }
+  .hud-item.speed { width: 90px; }
+  .hud-value { font-size: 14px; }
+  .combo { font-size: 15px; min-width: 60px; }
+  .icon-btn { width: 32px; height: 32px; font-size: 13px; }
+  .overlay-sub { font-size: 12px; }
+  /* コンボはキャンバス内のフロートテキストで見えるためHUDでは非表示 */
+  .combo { display: none; }
+  .topbar-btns { margin-left: auto; }
+}
