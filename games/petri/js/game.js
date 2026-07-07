@@ -653,13 +653,28 @@
     this.save();
   };
 
-  PetriGame.prototype.offlineSim = function (minutes) {
+  PetriGame.prototype.offlineSim = function (minutes, budgetMs) {
+    // 実CA計算は実時間バジェット内のみ（同期3万世代はスマホで数分フリーズし起動不能に見える）。
+    // バジェット超過分は統計外挿（胞子収入のみ加算、盤面は変えない）
     const gens = Math.min(30000, Math.max(0, Math.floor((minutes || 0) * 60 * 8)));
+    const budget = budgetMs == null ? 2000 : budgetMs;
     const before = Object.keys(this.codex).length;
     const pop0 = this.maxPopulation;
-    for (let i = 0; i < gens; i++) this.generationStep();
+    const t0 = Date.now();
+    let simulated = 0, popSum = 0;
+    for (; simulated < gens; simulated++) {
+      this.generationStep();
+      popSum += this.population;
+      if ((simulated & 63) === 0 && Date.now() - t0 > budget) { simulated++; break; }
+    }
+    const remaining = gens - simulated;
+    if (remaining > 0 && simulated > 0) {
+      const avgPop = popSum / simulated;
+      this.spores += (avgPop / 2400) * remaining; // 474行目の実レートと一致させる
+      this.generation += remaining;
+    }
     const after = Object.keys(this.codex).length;
-    const report = { generations: gens, maxPopulation: this.maxPopulation, newDiscoveries: after - before, previousMaxPopulation: pop0 };
+    const report = { generations: gens, simulated, extrapolated: remaining, maxPopulation: this.maxPopulation, newDiscoveries: after - before, previousMaxPopulation: pop0 };
     this.emit('offline', report);
     return report;
   };
@@ -747,6 +762,9 @@
       this.measurePopulation();
       return true;
     } catch (err) {
+      // 壊れた/非互換のセーブは破棄して新規培地で起動する（残すと毎回失敗し続ける）
+      try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
+      console.error('[petri] save destroyed, starting fresh:', err);
       return false;
     }
   };

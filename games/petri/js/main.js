@@ -128,10 +128,14 @@
   const validation = game.validate();
   if (!validation.ok) console.error('[validate]', validation);
 
-  const elapsedMinutes = Math.max(0, (Date.now() - game.lastSavedAt) / 60000);
-  if (elapsedMinutes > 1) {
-    const report = game.offlineSim(elapsedMinutes);
-    showModal('るす中レポート', report.generations + '世代経過<br>最大人口 ' + report.maxPopulation + '<br>新種 ' + report.newDiscoveries + '種発見');
+  try {
+    const elapsedMinutes = Math.max(0, (Date.now() - game.lastSavedAt) / 60000);
+    if (elapsedMinutes > 1) {
+      const report = game.offlineSim(elapsedMinutes); // 実計算は約2秒バジェット、残りは外挿
+      showModal('るす中レポート', report.generations + '世代経過<br>最大人口 ' + report.maxPopulation + '<br>新種 ' + report.newDiscoveries + '種発見');
+    }
+  } catch (err) {
+    console.error('[petri] offline report failed:', err);
   }
 
   if (params.get('autotest') === 'six' || params.get('autotest') === 'nutrient') {
