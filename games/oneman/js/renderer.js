@@ -4,6 +4,9 @@
   function mat(color, emissive) {
     return new THREE.MeshLambertMaterial({ color: color, emissive: emissive || 0x000000 });
   }
+  function phong(color, emissive, shininess) {
+    return new THREE.MeshPhongMaterial({ color: color, emissive: emissive || 0x000000, shininess: shininess || 24, specular: 0xffffff });
+  }
   function basic(color) { return new THREE.MeshBasicMaterial({ color: color }); }
   function tex(draw, w, h) {
     const c = document.createElement('canvas'); c.width = w || 256; c.height = h || 128;
@@ -21,10 +24,10 @@
   }
 
   const THEMES = [
-    { skyTop: '#7fc7f1', skyBottom: '#e6f4ff', ground: 0x79a866, sun: 0xffffff, fog: 0xcfe8f4 },
-    { skyTop: '#8fc9f0', skyBottom: '#f4ead4', ground: 0x8fa06b, sun: 0xfff0c4, fog: 0xd8e0d5 },
-    { skyTop: '#83a9d4', skyBottom: '#e0e8ea', ground: 0x5d7a56, sun: 0xffdcaa, fog: 0xb8c8c8 },
-    { skyTop: '#412b6a', skyBottom: '#ff9a45', ground: 0x5f725d, sun: 0xffa75c, fog: 0xe38a55 }
+    { name: 'morning-rural', skyTop: '#57b8f0', skyMid: '#bfe8ff', skyBottom: '#eef9ff', ground: 0x77a95e, sun: 0xffffff, hemiSky: 0xdff7ff, hemiGround: 0x779466, fog: 0xcdeef8, sunPos: [140, 145, -110], sunDisc: null },
+    { name: 'afternoon-town', skyTop: '#4fa8e2', skyMid: '#c2dff0', skyBottom: '#f3dfb8', ground: 0x95a56c, sun: 0xffe2a4, hemiSky: 0xe9f0ff, hemiGround: 0x8b875b, fog: 0xd8d4bd, sunPos: [70, 105, -35], sunDisc: null },
+    { name: 'evening-mountain', skyTop: '#476d9c', skyMid: '#c0b7ca', skyBottom: '#f1b06e', ground: 0x506f4e, sun: 0xffbc78, hemiSky: 0xb9c7e4, hemiGround: 0x59633f, fog: 0xb8a987, sunPos: [-85, 68, 60], sunDisc: 0xffbf69 },
+    { name: 'magic-hour-sea', skyTop: '#211946', skyMid: '#8b4b84', skyBottom: '#ff873f', ground: 0x5a6f5a, sun: 0xff7d38, hemiSky: 0x58407f, hemiGround: 0x4c463f, fog: 0xce7651, sunPos: [-190, 18, 120], sunDisc: 0xffc15b }
   ];
 
   function OneManRenderer(canvas, hud) {
@@ -44,7 +47,10 @@
     this.scene.add(this.hemi); this.scene.add(this.sun);
     this.train = this.buildTrain();
     this.cab = this.buildCab();
-    this.scene.add(this.train); this.scene.add(this.cab);
+    this.trainShadow = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 32), new THREE.MeshBasicMaterial({ color: 0x1a120f, transparent: true, opacity: 0.0, depthWrite: false }));
+    this.trainShadow.rotation.x = -Math.PI / 2;
+    this.themeParams = THEMES;
+    this.scene.add(this.train); this.scene.add(this.cab); this.scene.add(this.trainShadow);
     this.resize();
   }
 
@@ -73,6 +79,11 @@
     obj.rotation.y = p.yaw;
   };
 
+  OneManRenderer.prototype.rand = function (idx, salt) {
+    const x = Math.sin((idx + 1) * 127.1 + (salt + 1) * 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  };
+
   OneManRenderer.prototype.buildSection = function (s) {
     while (this.world.children.length) this.world.remove(this.world.children[0]);
     const idx = s.stationIndex || 0;
@@ -80,15 +91,21 @@
     const length = s.sectionLength || 1000;
     const th = THEMES[idx] || THEMES[0];
     this.renderer.setClearColor(th.fog, 1);
-    this.scene.fog = new THREE.Fog(th.fog, 400, 1650);
+    this.scene.fog = new THREE.Fog(th.fog, idx === 3 ? 300 : 430, idx === 3 ? 1850 : 1650);
     this.sun.color.setHex(th.sun);
-    this.sun.position.set(idx === 3 ? -140 : 120, idx === 3 ? 45 : 140, idx === 3 ? 120 : -80);
+    this.sun.position.set(th.sunPos[0], th.sunPos[1], th.sunPos[2]);
+    this.sun.intensity = idx === 3 ? 1.75 : idx === 2 ? 1.35 : 1.2;
+    this.hemi.color.setHex(th.hemiSky);
+    this.hemi.groundColor.setHex(th.hemiGround);
+    this.hemi.intensity = idx === 3 ? 0.58 : idx === 2 ? 0.78 : 1.05;
     this.buildSky(th);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(1800, length + 800), mat(th.ground));
     ground.rotation.x = -Math.PI / 2; ground.position.set(0, -0.08, length / 2);
     this.world.add(ground);
     this.buildTrack(idx, length);
     this.buildStation(idx, route, length);
+    this.buildDistantMountains(idx, length);
+    this.buildTrees(idx, length);
     if (idx === 0) this.buildRural(length);
     else if (idx === 1) this.buildTown(length);
     else if (idx === 2) this.buildMountain(length);
@@ -98,13 +115,81 @@
 
   OneManRenderer.prototype.buildSky = function (th) {
     if (this.sky) this.scene.remove(this.sky);
+    if (this.skyObjects) this.scene.remove(this.skyObjects);
     const t = tex(function (g, c) {
       const gr = g.createLinearGradient(0, 0, 0, c.height);
-      gr.addColorStop(0, th.skyTop); gr.addColorStop(1, th.skyBottom);
+      gr.addColorStop(0, th.skyTop);
+      gr.addColorStop(0.55, th.skyMid);
+      gr.addColorStop(1, th.skyBottom);
       g.fillStyle = gr; g.fillRect(0, 0, c.width, c.height);
     }, 16, 256);
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(1900, 24, 12), new THREE.MeshBasicMaterial({ map: t, side: THREE.BackSide, depthWrite: false }));
     this.scene.add(this.sky);
+    this.skyObjects = new THREE.Group();
+    const cloudMat = new THREE.MeshBasicMaterial({ color: th.name.indexOf('magic') >= 0 ? 0xf2a66f : 0xffffff, transparent: true, opacity: th.name.indexOf('magic') >= 0 ? 0.38 : 0.58, depthWrite: false });
+    for (let i = 0; i < 8; i++) {
+      const cloud = new THREE.Mesh(new THREE.PlaneGeometry(70 + i * 9, 18 + (i % 3) * 6), cloudMat);
+      cloud.position.set(-360 + i * 105, 135 + (i % 4) * 22, 220 + i * 155);
+      cloud.rotation.y = Math.PI;
+      this.skyObjects.add(cloud);
+    }
+    if (th.sunDisc) {
+      const sun = new THREE.Mesh(new THREE.CircleGeometry(th.name.indexOf('magic') >= 0 ? 42 : 30, 40), new THREE.MeshBasicMaterial({ color: th.sunDisc, transparent: true, opacity: 0.95, depthWrite: false }));
+      sun.position.set(th.name.indexOf('magic') >= 0 ? -420 : -260, th.name.indexOf('magic') >= 0 ? 78 : 115, 720);
+      this.skyObjects.add(sun);
+    }
+    this.scene.add(this.skyObjects);
+  };
+
+  OneManRenderer.prototype.buildDistantMountains = function (idx, length) {
+    const colors = [0x78a778, 0x7d8d6c, 0x3f5b48, 0x3b3157];
+    for (let side of [-1, 1]) {
+      for (let i = 0; i < 12; i++) {
+        const z = 50 + i * (length / 11);
+        const p = this.curve(idx, z, length);
+        const m = new THREE.Mesh(new THREE.ConeGeometry(70 + (i % 4) * 18, 60 + (i % 5) * 18, 5), mat(colors[idx]));
+        m.position.set(p.x + side * (idx === 3 && side < 0 ? 360 : 180 + (i % 3) * 35), 22, z + (i % 2) * 26);
+        m.rotation.y = (i % 4) * 0.3;
+        this.world.add(m);
+      }
+    }
+  };
+
+  OneManRenderer.prototype.buildTrees = function (idx, length) {
+    const trunkGeo = new THREE.CylinderGeometry(0.35, 0.45, 3.2, 6);
+    const leafGeo = new THREE.ConeGeometry(2.4, 6.2, 7);
+    const trunkMat = mat(0x68452b);
+    const leafMats = [mat(0x3f7f3d), mat(0x4d8b42), mat(0x2f6a3b), mat(0x5f7e3a)];
+    const count = idx === 2 ? 110 : idx === 3 ? 56 : 82;
+    const trunkMesh = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
+    const leafMeshes = leafMats.map(function (m) { return new THREE.InstancedMesh(leafGeo, m, Math.ceil(count / leafMats.length)); });
+    const trunkMatrix = new THREE.Matrix4();
+    const leafMatrix = new THREE.Matrix4();
+    let trunkIndex = 0;
+    const leafCounts = [0, 0, 0, 0];
+    for (let i = 0; i < count; i++) {
+      const z = 35 + this.rand(i, idx) * (length - 100);
+      const p = this.curve(idx, z, length);
+      const side = this.rand(i, idx + 4) > 0.5 ? 1 : -1;
+      if (idx === 3 && side < 0) continue;
+      const dist = 20 + this.rand(i, idx + 8) * 60;
+      const x = p.x + side * dist + (this.rand(i, 9) - 0.5) * 20;
+      const scale = 0.75 + this.rand(i, 11) * 0.75;
+      const ry = this.rand(i, 12) * Math.PI;
+      trunkMatrix.compose(new THREE.Vector3(x, 1.6 * scale, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), new THREE.Vector3(scale, scale, scale));
+      trunkMesh.setMatrixAt(trunkIndex++, trunkMatrix);
+      const matIndex = (i + idx) % leafMeshes.length;
+      leafMatrix.compose(new THREE.Vector3(x, 6.0 * scale, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, 0)), new THREE.Vector3(scale, scale, scale));
+      leafMeshes[matIndex].setMatrixAt(leafCounts[matIndex]++, leafMatrix);
+    }
+    trunkMesh.count = trunkIndex;
+    trunkMesh.instanceMatrix.needsUpdate = true;
+    this.world.add(trunkMesh);
+    for (let j = 0; j < leafMeshes.length; j++) {
+      leafMeshes[j].count = leafCounts[j];
+      leafMeshes[j].instanceMatrix.needsUpdate = true;
+      this.world.add(leafMeshes[j]);
+    }
   };
 
   OneManRenderer.prototype.buildTrack = function (idx, length) {
@@ -172,50 +257,89 @@
   };
 
   OneManRenderer.prototype.buildRural = function (length) {
-    const water = basic(0x8ac5d9), bank = mat(0x6c8a4d);
-    for (let side of [-1, 1]) for (let z = 80; z < length - 140; z += 110) {
+    const waterMats = [basic(0x86c8df), basic(0xa9def0), basic(0x73b9d1)];
+    const bank = mat(0x6c8a4d);
+    for (let side of [-1, 1]) for (let z = 45; z < length - 105; z += 74) {
       const p = this.curve(0, z, length);
-      const field = new THREE.Mesh(new THREE.BoxGeometry(80, 0.03, 72), water);
-      field.position.set(p.x + side * 62, 0.01, z); this.world.add(field);
-      const ridge = new THREE.Mesh(new THREE.BoxGeometry(82, 0.07, 2), bank);
-      ridge.position.set(p.x + side * 62, 0.06, z - 36); this.world.add(ridge);
+      const w = 95 + (Math.floor(z) % 3) * 16;
+      const field = new THREE.Mesh(new THREE.BoxGeometry(w, 0.035, 62), waterMats[Math.floor(z / 74) % waterMats.length]);
+      field.position.set(p.x + side * 58, 0.012, z); this.world.add(field);
+      for (let dz of [-31, 31]) {
+        const ridge = new THREE.Mesh(new THREE.BoxGeometry(w + 4, 0.08, 1.8), bank);
+        ridge.position.set(p.x + side * 58, 0.06, z + dz); this.world.add(ridge);
+      }
+      const path = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.09, 64), mat(0xa98f55));
+      path.position.set(p.x + side * 12, 0.07, z); this.world.add(path);
     }
   };
   OneManRenderer.prototype.buildTown = function (length) {
+    const roofColors = [0x6f3f35, 0x334b68, 0x7c5c35];
     for (let side of [-1, 1]) for (let z = 80; z < length - 150; z += 58) {
       const p = this.curve(1, z, length);
       const house = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(7, 4, 6), mat(side < 0 ? 0xd8c3a2 : 0xc9d0d3));
+      const bw = 6 + (Math.floor(z) % 3), bd = 5 + (Math.floor(z / 2) % 3);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(bw, 3.4 + (z % 2), bd), mat(side < 0 ? 0xd8c3a2 : 0xc9d0d3));
       body.position.y = 2; house.add(body);
-      const roof = new THREE.Mesh(new THREE.BoxGeometry(7.8, 1.1, 6.8), mat(0x6f3f35));
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.8, 1.1, bd + 0.8), mat(roofColors[Math.floor(z / 58) % roofColors.length]));
       roof.position.y = 4.55; house.add(roof);
-      house.position.set(p.x + side * (38 + (z % 3) * 8), 0, z); this.world.add(house);
+      house.position.set(p.x + side * (38 + (z % 3) * 8), 0, z);
+      house.rotation.y = side * (0.08 + (z % 5) * 0.03);
+      this.world.add(house);
+      if (Math.floor(z) % 116 === 0) {
+        const pole = new THREE.Group();
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 8, 8), mat(0x5b4633)); mast.position.y = 4; pole.add(mast);
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(4, 0.12, 0.12), mat(0x4c3a2b)); arm.position.set(side * -1.6, 7.1, 0); pole.add(arm);
+        pole.position.set(p.x + side * 21, 0, z + 14); this.world.add(pole);
+      }
     }
     const cross = new THREE.Mesh(new THREE.BoxGeometry(92, 0.04, 7), mat(0x3c3c3c));
     cross.position.set(0, 0.04, length * 0.46); this.world.add(cross);
     for (let side of [-1, 1]) {
       const gate = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 8), mat(0xffd42a));
       gate.position.set(side * 4, 1.3, length * 0.46); gate.rotation.z = side * 0.45; this.world.add(gate);
+      const signal = new THREE.Group();
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.2, 8), mat(0x303030)); post.position.y = 1.6; signal.add(post);
+      const board = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 1.2), mat(0x151515)); board.position.y = 3.1; signal.add(board);
+      const red1 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), basic(0xff2020)); red1.position.set(0.12, 3.28, -0.25); signal.add(red1);
+      const red2 = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8), basic(0xff2020)); red2.position.set(0.12, 3.28, 0.25); signal.add(red2);
+      signal.position.set(side * 7.2, 0, length * 0.46 - 5); this.world.add(signal);
     }
   };
   OneManRenderer.prototype.buildMountain = function (length) {
-    for (let i = 0; i < 34; i++) {
+    for (let i = 0; i < 48; i++) {
       const z = 40 + i * 34;
       const p = this.curve(2, z, length);
-      const hill = new THREE.Mesh(new THREE.ConeGeometry(26 + (i % 5) * 6, 34 + (i % 4) * 10, 6), mat(0x456348));
-      hill.position.set(p.x + (i % 2 ? -82 : 86), 14, z); this.world.add(hill);
+      for (let side of [-1, 1]) {
+        const hill = new THREE.Mesh(new THREE.ConeGeometry(34 + (i % 5) * 8, 58 + (i % 4) * 18, 6), mat(i % 2 ? 0x3d5a43 : 0x506a4c));
+        hill.position.set(p.x + side * (70 + (i % 4) * 18), 23, z);
+        this.world.add(hill);
+      }
+    }
+    const bridgeZ = length * 0.68;
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.5, 70), mat(0x4f5962));
+    deck.position.set(0, 2.3, bridgeZ); this.world.add(deck);
+    for (let x of [-4.5, 4.5]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.2, 70), mat(0x6a737a));
+      rail.position.set(x, 3.0, bridgeZ); this.world.add(rail);
     }
   };
   OneManRenderer.prototype.buildSea = function (length) {
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(900, length + 500), basic(0x315f8f));
-    sea.rotation.x = -Math.PI / 2; sea.position.set(-260, 0.005, length / 2); this.world.add(sea);
-    const sun = new THREE.Mesh(new THREE.CircleGeometry(26, 32), basic(0xffd07a));
-    sun.position.set(-340, 120, length * 0.72); this.world.add(sun);
+    const seaMat = new THREE.MeshPhongMaterial({ color: 0x2b5f91, emissive: 0x15163f, shininess: 80, specular: 0xffb56b });
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(1200, length + 900), seaMat);
+    sea.rotation.x = -Math.PI / 2; sea.position.set(-390, 0.005, length / 2); this.world.add(sea);
+    const reflect = new THREE.Mesh(new THREE.PlaneGeometry(54, length * 0.72), new THREE.MeshBasicMaterial({ color: 0xffa34c, transparent: true, opacity: 0.45, depthWrite: false }));
+    reflect.rotation.x = -Math.PI / 2; reflect.position.set(-245, 0.018, length * 0.55); this.world.add(reflect);
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.6, length + 250), mat(0xb6b1a0));
+    wall.position.set(-52, 0.8, length / 2); this.world.add(wall);
+    const sun = new THREE.Mesh(new THREE.CircleGeometry(36, 40), basic(0xffc15b));
+    sun.position.set(-430, 82, length * 0.66); this.world.add(sun);
   };
 
   OneManRenderer.prototype.buildTrain = function () {
     const g = new THREE.Group();
-    const bodyMat = mat(0xf4f2e8), stripeMat = mat(0xb94825), winMat = new THREE.MeshBasicMaterial({ color: 0x2a4c68, emissive: 0x173047 });
+    const bodyMat = phong(0xf4f2e8, 0x000000, 72), stripeMat = phong(0xb94825, 0x150602, 38), winMat = new THREE.MeshBasicMaterial({ color: 0x2a4c68, emissive: 0x173047 });
+    this.trainBodyMat = bodyMat;
+    this.trainStripeMat = stripeMat;
     for (let i = 0; i < 2; i++) {
       const car = new THREE.Group(); car.position.z = i * 20.5;
       const body = new THREE.Mesh(new THREE.BoxGeometry(2.9, 2.55, 18.5), bodyMat); body.position.y = 1.65; car.add(body);
@@ -260,8 +384,16 @@
     this.clock += (dtMs || 16) / 1000;
     const s = game.getState();
     if (this.sectionBuilt !== s.stationIndex) this.buildSection(s);
+    if (this.trainBodyMat) {
+      const shine = Math.max(0, Math.sin(this.clock * 1.5 + (s.routePos || 0) * 0.018)) * (s.stationIndex === 3 ? 0.18 : 0.06);
+      this.trainBodyMat.emissive.setRGB(shine, shine * 0.72, shine * 0.36);
+      this.trainStripeMat.emissive.setRGB(shine * 0.7, shine * 0.25, shine * 0.08);
+    }
     const p = this.trackPoint(s, s.routePos || 0);
     this.applyTrack(this.train, p, 0.2);
+    this.trainShadow.position.set(p.x + (s.stationIndex === 3 ? 18 : 5), 0.025, p.z + 5);
+    this.trainShadow.rotation.z = -0.42 + p.yaw;
+    this.trainShadow.material.opacity = s.stationIndex === 3 ? 0.32 : s.stationIndex === 2 ? 0.18 : 0.11;
     if (s.shot === 'COCKPIT') this.renderCockpit(s, p);
     else if (s.shot === 'SIDE_STOP') this.renderSideStop(s);
     else if (s.shot === 'PLATFORM') this.renderPlatform(s);
@@ -300,19 +432,20 @@
     const t = this.clock;
     const wob = Math.sin(t * 2.1) * 0.25;
     if (s.shot === 'CINE_FRONT') {
-      const ahead = this.curve(s.stationIndex, Math.min(s.sectionLength, z + 115), s.sectionLength);
-      this.camera.position.set(ahead.x + 6, 2.2 + wob, ahead.z);
-      this.camera.lookAt(new THREE.Vector3(p.x, 1.6, p.z));
+      const ahead = this.curve(s.stationIndex, Math.min(s.sectionLength, z + 88), s.sectionLength);
+      this.camera.position.set(ahead.x + 9, 2.8 + wob, ahead.z + 6);
+      this.camera.lookAt(new THREE.Vector3(p.x, 1.55, p.z + 5));
     } else if (s.shot === 'CINE_AERIAL') {
       this.camera.position.set(p.x + 48, 42 + wob, p.z - 55);
       this.camera.lookAt(new THREE.Vector3(p.x, 1.2, p.z + 20));
     } else if (s.shot === 'CINE_TAIL') {
-      const tail = this.curve(s.stationIndex, Math.max(0, z - 36), s.sectionLength);
-      this.camera.position.set(tail.x, 3.2 + wob, tail.z - 30);
-      this.camera.lookAt(new THREE.Vector3(p.x, 1.7, p.z + 30));
+      const tail = this.curve(s.stationIndex, Math.max(0, z - 52), s.sectionLength);
+      this.camera.position.set(tail.x - 5, 4.4 + wob, tail.z - 42);
+      this.camera.lookAt(new THREE.Vector3(p.x, 1.65, p.z + 20));
     } else {
-      this.camera.position.set(p.x + 12, 3.0 + wob, p.z - 8);
-      this.camera.lookAt(new THREE.Vector3(p.x, 1.5, p.z + 6));
+      const side = s.stationIndex === 3 ? -1 : 1;
+      this.camera.position.set(p.x + side * 20, 4.1 + wob, p.z - 16);
+      this.camera.lookAt(new THREE.Vector3(p.x, 1.55, p.z + 7));
     }
     this.cab.visible = false; this.train.visible = true;
   };
