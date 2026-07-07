@@ -1,4 +1,4 @@
-const VERSION = 3;
+const VERSION = 4;
 
 const WORLD = { w: 960, h: 540 };
 const ACT = {
@@ -43,7 +43,7 @@ const BEST_KEY = 'teijidash.weekBest.v1';
 
 const TUNING = {
   interludeMs: 1200,
-  prepMs: 40000,
+  prepMs: 22000,
   justMs: 15000,
   justFreezeMs: 400,
   justFlashMs: 100,
@@ -53,9 +53,9 @@ const TUNING = {
   finaleFreezeStartMs: 1450,
   finaleFreezeMs: 520,
   finaleDoorX: 4920,
-  prepRate: 100 / 27000,
-  prepPenalty: 6,
-  caughtPenaltyMs: 1800,
+  prepRate: 100 / 14000,
+  prepPenalty: 10,
+  caughtPenaltyMs: 0,
   qteLeadMs: 1200,
   qteWindowMs: 260,
 };

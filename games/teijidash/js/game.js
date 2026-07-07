@@ -35,6 +35,8 @@ class TeijiDashGame {
     this.bossForced = null;
     this.bossTimer = 0;
     this.bossWarn = 0;
+    this.bossWarnMax = 0;
+    this.bossWarnKind = 'none';
     this.caught = 0;
     this.justPresses = 0;
     this.justJudge = null;
@@ -91,8 +93,24 @@ class TeijiDashGame {
 
   scheduleBoss() {
     const level = this.day;
-    this.bossTimer = this.rng.range(1200 - level * 70, 2500 - level * 120);
+    this.bossTimer = this.rng.range(1050 - level * 55, 2100 - level * 95);
     this.bossWarn = 0;
+    this.bossWarnMax = 0;
+    this.bossWarnKind = 'none';
+  }
+
+  rollBossWarnKind() {
+    const level = this.day;
+    const pool = ['normal', 'normal', 'coffee', 'stretch'];
+    if (level >= 1) pool.push('feint');
+    if (level >= 2) pool.push('feint');
+    if (level >= 3) pool.push('quick');
+    if (level >= 4) pool.push('quick', 'feint');
+    return this.rng.pick(pool);
+  }
+
+  bossWarnDuration(kind) {
+    return kind === 'coffee' ? 700 : kind === 'stretch' ? 600 : kind === 'quick' ? 250 : 500;
   }
 
   update(dtMs) {
@@ -122,14 +140,23 @@ class TeijiDashGame {
     if (this.bossForced === null) {
       this.bossTimer -= dt;
       if (!this.bossLooking && this.bossTimer <= 0 && this.bossWarn <= 0) {
-        this.bossWarn = this.rng.range(300, 600);
-        this.emit('bossWarn', { kind: this.rng.pick(['shoulder', 'coffee', 'fake']) });
+        this.bossWarnKind = this.rollBossWarnKind();
+        this.bossWarn = this.bossWarnDuration(this.bossWarnKind);
+        this.bossWarnMax = this.bossWarn;
+        this.emit('bossWarn', { kind: this.bossWarnKind, ms: this.bossWarnMax });
       } else if (this.bossWarn > 0) {
         this.bossWarn -= dt;
         if (this.bossWarn <= 0) {
-          this.bossLooking = true;
-          this.bossTimer = this.rng.range(720, 1150 + this.day * 90);
-          this.emit('bossLook', { on: true });
+          if (this.bossWarnKind === 'feint') {
+            this.bossLooking = false;
+            this.bossTimer = this.rng.range(1750, 2600);
+            this.emit('bossFeint', { kind: this.bossWarnKind });
+            this.bossWarnKind = 'none';
+          } else {
+            this.bossLooking = true;
+            this.bossTimer = this.bossWarnKind === 'quick' ? this.rng.range(360, 560) : this.rng.range(650, 980 + this.day * 70);
+            this.emit('bossLook', { on: true, kind: this.bossWarnKind });
+          }
         }
       } else if (this.bossLooking && this.bossTimer <= 0) {
         this.bossLooking = false;
@@ -144,10 +171,10 @@ class TeijiDashGame {
       if (this.bossLooking) {
         this.inputDown = false;
         this.prep = clamp(this.prep - TUNING.prepPenalty, 0, 100);
-        this.time += TUNING.caughtPenaltyMs;
+        this.prepStage = clamp(Math.floor(this.prep / 25), 0, 3);
         this.caught++;
         this.say('発見!!', 900);
-        this.emit('caught', { prep: this.prep });
+        this.emit('caught', { prep: this.prep, stage: this.prepStage });
       } else {
         const oldStage = this.prepStage;
         this.prep = clamp(this.prep + TUNING.prepRate * dt, 0, 100);
@@ -432,6 +459,8 @@ class TeijiDashGame {
       prepAnim: { stage: this.prepAnim.stage, age: Math.round(this.prepAnim.age), serial: this.prepAnim.serial },
       bossLooking: this.bossLooking,
       bossWarnMs: Math.round(this.bossWarn),
+      bossWarnMaxMs: Math.round(this.bossWarnMax),
+      bossWarnKind: this.bossWarnKind,
       clockMs: Math.round(this.justClockMs),
       slowMs: this.act === ACT.JUST_SLOW ? Math.round(this.time) : 0,
       finaleMs: this.act === ACT.FINALE ? Math.round(this.time) : 0,

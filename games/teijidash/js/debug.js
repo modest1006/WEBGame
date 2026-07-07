@@ -46,7 +46,7 @@ function installDebug(game) {
       const s = game.getState();
       overlay.textContent = [
         `FPS ${fps} ${s.dayName} act=${s.act} paused=${s.paused}`,
-        `prep=${s.prep}% stage=${s.prepStage} boss=${s.bossLooking} warn=${s.bossWarnMs}`,
+        `prep=${s.prep}% stage=${s.prepStage} boss=${s.bossLooking} warn=${s.bossWarnMs} kind=${s.bossWarnKind}`,
         `clock=${s.clockMs} judge=${s.judge} offset=${s.offset}`,
         `score=${s.score} combo=${s.combo}/${s.maxCombo} run=${s.runX} speed=${s.speed}`,
         `finale=${s.finaleMs || 0} grade=${s.finaleGrade || '-'}`,

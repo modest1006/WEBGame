@@ -23,8 +23,9 @@ class Renderer {
   }
 
   handleEvent(type, data) {
-    if (type === 'caught') { this.smallBurst(604, 184, '発見!!', '#ff4d4d'); this.shake = 24; }
+    if (type === 'caught') { this.smallBurst(604, 184, '発見!!', '#ff4d4d'); this.shake = 16; }
     if (type === 'bossWarn') this.smallBurst(658, 150, 'ピクッ', '#fff8df');
+    if (type === 'prepAction' && data.stage >= 3) this.shake = Math.max(this.shake, 5);
     if (type === 'just') this.shake = data.judge === 'PERFECT' ? 32 : 20;
     if (type === 'qteSuccess') { this.smallBurst(480, 270, data.qte.type === 'coworker' ? 'はやっ…' : 'OK!', '#fff2a4'); this.shake = 10; }
     if (type === 'qteFail') { this.smallBurst(480, 270, data.qte.type === 'coworker' ? '捕獲!' : 'ドサッ!', '#ff7b7b'); this.shake = 22; }
@@ -102,12 +103,33 @@ class Renderer {
 
   drawBoss(c, game) {
     const x = 670, y = 204;
+    const kind = game.bossWarnKind || 'none';
+    const warnP = game.bossWarnMax > 0 ? 1 - clamp(game.bossWarn / game.bossWarnMax, 0, 1) : 0;
+    const lift = game.bossWarn > 0 ? Math.sin(warnP * Math.PI) : 0;
+    const stretch = kind === 'stretch' ? lift : 0;
+    const coffee = kind === 'coffee' ? lift : 0;
+    const quick = kind === 'quick' ? warnP : 0;
+    const shoulder = (kind === 'normal' || kind === 'feint' || kind === 'quick') ? lift * (kind === 'quick' ? 18 : 10) : 0;
     c.fillStyle = '#3b2824';
     c.fillRect(x - 58, y + 88, 126, 74);
     c.fillStyle = '#655248';
-    c.fillRect(x - 38, y + 64, 86, 44);
+    c.fillRect(x - 38, y + 64 - shoulder, 86, 44);
+    c.fillStyle = '#655248';
+    if (stretch > 0) {
+      c.fillRect(x - 78, y + 30 - stretch * 44, 22, 74);
+      c.fillRect(x + 58, y + 30 - stretch * 44, 22, 74);
+    } else {
+      c.fillRect(x - 76, y + 72 - shoulder, 40, 14);
+      c.fillRect(x + 46, y + 72 - shoulder, 40, 14);
+    }
+    if (coffee > 0) {
+      c.fillStyle = '#fff8df';
+      c.fillRect(x + 78, y + 76 - coffee * 62, 24, 22);
+      c.fillStyle = '#6d4a33';
+      c.fillRect(x + 83, y + 80 - coffee * 62, 14, 8);
+    }
     c.fillStyle = '#f0c49c';
-    c.fillRect(x - 34, y, 70, 62);
+    c.fillRect(x - 34 + quick * 8, y - shoulder * 0.35, 70, 62);
     c.fillStyle = '#2b2220';
     if (game.bossLooking) {
       c.fillRect(x - 20, y + 22, 10, 12);
@@ -120,17 +142,29 @@ class Renderer {
     }
     if (game.bossWarn > 0) {
       c.fillStyle = '#fff';
-      c.font = '900 28px Arial';
-      c.fillText('!', x + 48, y + 18);
+      c.strokeStyle = '#2b2220';
+      c.lineWidth = 4;
+      c.font = `900 ${24 + warnP * 30}px Arial`;
+      c.textAlign = 'center';
+      c.strokeText('!', x + 54, y + 22 - warnP * 24);
+      c.fillText('!', x + 54, y + 22 - warnP * 24);
+      c.textAlign = 'left';
     }
   }
 
   drawDesk(c, x, y, game) {
+    const intensity = clamp(game.prep / 100, 0, 1);
+    const chaos = game.inputDown && !game.bossLooking ? intensity : 0;
+    const tilt = game.prepStage >= 3 && chaos ? Math.sin(game.time * 0.04) * 0.08 + 0.12 : 0;
+    c.save();
+    c.translate(x + 25, y + 66);
+    c.rotate(tilt);
+    c.translate(-(x + 25), -(y + 66));
     c.fillStyle = '#845b39';
     c.fillRect(x - 122, y + 42, 300, 50);
     c.fillStyle = '#463a40';
     const freeze = game.bossLooking;
-    const pcJitter = game.inputDown && !freeze && game.prepStage === 0 ? Math.sin(game.time * 0.09) * 9 : 0;
+    const pcJitter = game.inputDown && !freeze && game.prepStage === 0 ? Math.sin(game.time * 0.12) * 4 : 0;
     c.fillRect(x - 84 + pcJitter, y - 18 - Math.abs(pcJitter) * 0.4, 76, 56);
     c.fillStyle = game.prepStage > 0 ? '#101010' : '#96d7ff';
     c.fillRect(x - 76 + pcJitter, y - 10 - Math.abs(pcJitter) * 0.4, 60, 34);
@@ -144,28 +178,46 @@ class Renderer {
     for (let i = 0; i < 7; i++) c.fillRect(x + 42 + wobble, y + 30 - i * 8, 80, 7);
     c.fillStyle = '#2b2220';
     c.fillRect(x + 122, y + 18, 44, 28);
+    c.restore();
   }
 
   drawPlayer(c, x, y, game) {
     const freeze = game.bossLooking;
     const moving = game.inputDown && !freeze;
-    if (moving && game.prepStage === 1) this.drawFlyingPapers(c, x, y, game, false);
-    this.drawHuman(c, x, y, { suit: '#2f75bd', hair: '#35251f', pose: freeze ? 'work' : moving ? 'wild' : 'stand', t: game.time });
+    const emergency = moving && game.prepStage >= 3;
+    const shake = emergency ? Math.sin(game.time * 0.12) * 3 : 0;
+    if (moving && game.prepStage >= 1) this.drawFlyingPapers(c, x, y, game, false);
+    if (moving && game.prepStage >= 2) this.drawFlyingObjects(c, x, y, game, false);
+    if (moving && game.prepStage >= 3) this.drawPaperTornado(c, x, y, game);
+    this.drawHuman(c, x + shake, y, { suit: '#2f75bd', hair: '#35251f', pose: freeze ? 'work' : moving ? 'wild' : 'stand', t: game.time });
     if (moving) this.drawPrepStageAnimation(c, x, y, game);
     if (freeze) {
       c.fillStyle = '#66d7ff';
       c.fillRect(x + 40, y - 46, 12, 20);
       c.fillRect(x + 55, y - 28, 8, 14);
       this.drawFlyingPapers(c, x, y, game, true);
+      if (game.prepStage >= 2) this.drawFlyingObjects(c, x, y, game, true);
+      if (game.prepStage >= 3) {
+        c.fillStyle = '#5bb36b';
+        c.fillRect(x + 70, y - 62, 28, 38);
+        c.fillStyle = '#2b7a3a';
+        c.fillRect(x + 62, y - 82, 44, 24);
+      }
     }
   }
 
   drawPrepStageAnimation(c, x, y, game) {
     const age = game.prepAnim.age;
     const pulse = Math.sin(game.time * 0.05);
+    if (game.prepStage === 0) {
+      c.fillStyle = '#fff8df';
+      c.fillRect(x - 78, y - 18 + Math.sin(age * 0.06) * 2, 16, 6);
+      c.fillRect(x - 56, y - 18 + Math.cos(age * 0.06) * 2, 16, 6);
+      return;
+    }
     if (game.prepStage === 1) return;
     if (game.prepStage === 2) {
-      const inflate = 1 + 0.18 * Math.sin(game.time * 0.035);
+      const inflate = 1 + 0.28 * Math.sin(game.time * 0.05);
       c.fillStyle = '#2b2220';
       c.fillRect(x + 54, y + 18 - inflate * 8, 70 * inflate, 48 * inflate);
       c.strokeStyle = '#ffe05d';
@@ -176,6 +228,13 @@ class Renderer {
       c.stroke();
     } else if (game.prepStage === 3) {
       const t = (age % 640) / 640;
+      c.save();
+      c.translate(x - 10, y + 32);
+      c.rotate(t * Math.PI * 4);
+      c.strokeStyle = '#2b2220';
+      c.lineWidth = 7;
+      c.strokeRect(-38, -18, 76, 36);
+      c.restore();
       c.save();
       c.translate(x - 8, y - 50);
       c.rotate(t * Math.PI * 2);
@@ -192,7 +251,8 @@ class Renderer {
   drawFlyingPapers(c, x, y, game, frozen) {
     const age = frozen ? 360 : game.prepAnim.age;
     c.fillStyle = '#fff8df';
-    for (let i = 0; i < 12; i++) {
+    const count = game.prepStage >= 3 ? 26 : game.prepStage >= 2 ? 14 : 6;
+    for (let i = 0; i < count; i++) {
       const local = (age + i * 90) % 900;
       const t = local / 900;
       const sx = x - 70 + i * 4;
@@ -207,6 +267,54 @@ class Renderer {
       c.fillRect(-13, -5, 26, 10);
       c.restore();
     }
+  }
+
+  drawFlyingObjects(c, x, y, game, frozen) {
+    const age = frozen ? 430 : game.prepAnim.age;
+    const items = [
+      { color: '#2b2220', w: 30, h: 18, label: 'TEL' },
+      { color: '#fff8df', w: 22, h: 20, label: '' },
+      { color: '#5bb36b', w: 26, h: 34, label: '' },
+      { color: '#ffe05d', w: 24, h: 16, label: '' },
+    ];
+    for (let i = 0; i < items.length; i++) {
+      const t = ((age + i * 130) % 900) / 900;
+      const it = items[i];
+      const sx = x - 132 + i * 34;
+      const sy = y + 20 - i * 18;
+      const bx = x + 122;
+      const by = y + 36;
+      const px = lerp(sx, bx, easeInOut(t)) + Math.sin(t * Math.PI * 2 + i) * 36;
+      const py = lerp(sy, by, t) - Math.sin(t * Math.PI) * (120 + i * 12);
+      c.save();
+      c.translate(px, py);
+      c.rotate((frozen ? 0.6 : t * 7) + i);
+      c.fillStyle = it.color;
+      c.fillRect(-it.w / 2, -it.h / 2, it.w, it.h);
+      if (i === 2) {
+        c.fillStyle = '#2b7a3a';
+        c.fillRect(-22, -28, 44, 20);
+      }
+      c.restore();
+    }
+  }
+
+  drawPaperTornado(c, x, y, game) {
+    c.globalAlpha = 0.82;
+    for (let i = 0; i < 34; i++) {
+      const t = i / 34;
+      const a = game.time * 0.018 + i * 0.75;
+      const r = 34 + t * 82;
+      const px = x + Math.cos(a) * r;
+      const py = y + 52 - t * 180 + Math.sin(a * 1.7) * 12;
+      c.save();
+      c.translate(px, py);
+      c.rotate(a);
+      c.fillStyle = i % 3 === 0 ? '#ffe05d' : '#fff8df';
+      c.fillRect(-12, -5, 24, 10);
+      c.restore();
+    }
+    c.globalAlpha = 1;
   }
 
   drawHuman(c, x, y, opt) {

@@ -48,7 +48,17 @@ class Music {
 
   event(type, data) {
     if (!this.ctx || this.muted) return;
-    if (type === 'prepAction') { this.tone(80, 0.12, 'square', 0.1); this.noise(0.08, 0.07); }
+    if (type === 'prepAction') {
+      const stage = data.stage || 0;
+      const gain = [0.025, 0.055, 0.09, 0.12][stage] || 0.06;
+      this.tone(stage >= 3 ? 740 : stage >= 2 ? 130 : 440, stage >= 3 ? 0.07 : 0.1, stage >= 3 ? 'square' : 'triangle', gain);
+      if (stage >= 1) this.noise(stage >= 3 ? 0.05 : 0.07, gain * 0.75);
+      if (stage >= 3) this.tone(980, 0.06, 'square', 0.05, this.now() + 0.08);
+    }
+    if (type === 'bossWarn') {
+      const f = data.kind === 'quick' ? 1040 : data.kind === 'coffee' ? 520 : data.kind === 'stretch' ? 430 : 700;
+      this.tone(f, 0.07, 'triangle', 0.055);
+    }
     if (type === 'bossLook') this.tone(data.on ? 140 : 360, 0.08, 'sawtooth', 0.05);
     if (type === 'caught') { this.tone(90, 0.35, 'sawtooth', 0.12); this.noise(0.18, 0.12); }
     if (type === 'flying') this.tone(220, 0.2, 'triangle', 0.08);
