@@ -1,0 +1,45 @@
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #070304; color: #ffd6a4; font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; letter-spacing: 0; }
+button { font: inherit; color: #ffd6a4; background: #2a1514; border: 2px solid #8a3327; padding: 8px 12px; cursor: pointer; }
+button:active { transform: translateY(1px); }
+#shell { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: #070304; }
+#view { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+#weapon-view { position: absolute; left: 0; top: 0; width: 100%; height: 100%; image-rendering: pixelated; pointer-events: none; }
+#flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, transparent 35%, rgba(170,0,0,.75) 100%); mix-blend-mode: screen; }
+#topbar { position: absolute; left: 12px; right: 12px; top: 10px; height: 36px; display: flex; align-items: center; gap: 14px; text-shadow: 2px 2px #000; z-index: 4; }
+#topbar b { color: #ff3b22; font-size: 26px; }
+#level-name { color: #ffd6a4; font-family: Arial, sans-serif; font-weight: 700; flex: 1; }
+#mute-btn { padding: 5px 10px; font-family: Arial, sans-serif; font-weight: 800; }
+#hud { position: absolute; left: 0; right: 0; bottom: 0; height: 96px; display: grid; grid-template-columns: 1fr 1fr 116px 1fr 86px; gap: 8px; align-items: center; box-sizing: border-box; padding: 10px 14px; border-top: 4px solid #351311; background: linear-gradient(#221614, #10090a); box-shadow: 0 -8px 0 rgba(0,0,0,.34); z-index: 5; }
+.hud-block { display: grid; grid-template-rows: 24px 1fr; min-width: 0; }
+.hud-block span { font-family: Arial, sans-serif; font-size: 13px; font-weight: 900; color: #c18052; }
+.hud-block b { color: #f0d34d; font-size: 44px; line-height: 48px; text-shadow: 3px 3px #000; white-space: nowrap; }
+#face { width: 96px; height: 72px; border: 3px solid #4b2520; background: #2b1a18; image-rendering: pixelated; justify-self: center; }
+.keys { display: flex; gap: 7px; align-items: center; justify-content: center; }
+.keys i { width: 18px; height: 34px; border: 2px solid #5a3330; opacity: .25; display: block; }
+#key-r { background: #d51c1c; } #key-b { background: #2069ff; } #key-y { background: #e5c229; }
+.keys i.on { opacity: 1; box-shadow: 0 0 12px currentColor; }
+#overlay { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; background: rgba(10,0,0,.62); z-index: 7; }
+#overlay.hidden { display: none; }
+#overlay h1 { margin: 0; color: #ff331e; font-size: clamp(56px, 11vw, 132px); line-height: .9; text-shadow: 6px 6px #000; }
+#overlay p { max-width: 620px; margin: 14px auto; font: 800 18px/1.35 Arial, sans-serif; color: #ffd6a4; }
+#play-btn { font-size: 24px; background: #5b1714; border-color: #e24a2d; }
+#debug-overlay { position: absolute; left: 8px; top: 54px; z-index: 9; margin: 0; padding: 8px; max-width: 48vw; max-height: 56vh; overflow: hidden; color: #9aff9a; background: rgba(0,0,0,.72); font: 12px/1.25 Consolas, monospace; white-space: pre-wrap; }
+.hidden { display: none; }
+#touch-ui { display: none; }
+@media (pointer: coarse) {
+  #hud { height: 86px; grid-template-columns: 1fr 1fr 92px 1fr 68px; padding: 8px; }
+  .hud-block b { font-size: 34px; }
+  #face { width: 78px; height: 58px; }
+  #touch-ui { display: block; position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+  #stick { position: absolute; left: 22px; bottom: 118px; width: 118px; height: 118px; border-radius: 50%; background: rgba(0,0,0,.32); border: 2px solid rgba(255,214,164,.32); pointer-events: auto; }
+  #stick span { position: absolute; left: 42px; top: 42px; width: 34px; height: 34px; border-radius: 50%; background: rgba(255,214,164,.7); }
+  #fire-touch { position: absolute; right: 22px; bottom: 118px; width: 104px; height: 104px; border-radius: 50%; border-color: #ff4a2d; background: rgba(110,20,17,.72); pointer-events: auto; }
+  #use-touch { position: absolute; right: 134px; bottom: 130px; width: 70px; height: 70px; border-radius: 50%; pointer-events: auto; }
+  #weapon-touch { position: absolute; right: 18px; bottom: 230px; display: flex; gap: 8px; pointer-events: auto; }
+  #weapon-touch button { width: 42px; height: 42px; padding: 0; }
+}
+@media (max-width: 560px) {
+  #topbar b { font-size: 20px; }
+  #level-name { font-size: 12px; }
+  #hud { gap: 4px; }
+}

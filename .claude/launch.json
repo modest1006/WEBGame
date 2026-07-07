@@ -38,6 +38,12 @@
       "port": 8129
     },
     {
+      "name": "hellbreak",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8130", "--directory", "games/hellbreak"],
+      "port": 8130
+    },
+    {
       "name": "bunnyhop",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8124", "--directory", "games/bunnyhop"],
