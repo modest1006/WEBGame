@@ -19,9 +19,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Orchestration workflow
 
-実装はCodexに委任し、Fableは仕様策定・レビュー・実機検証・統合を担う。委任前に必ず `.claude/skills/codex-delegation/SKILL.md`（呼び出しパラメータ・仕様書テンプレ・差し戻しのコツ）を読むこと。
+**あなた（このセッションのClaude）がオーケストレーター。まず `HANDOVER.md`（引き継ぎ書: 体制・パイプライン・検証の落とし穴・ユーザーの好み）を読むこと。**
+実装はCodexに委任し、オーケストレーターは仕様策定・レビュー・実機検証・統合を担う。委任前に必ず `.claude/skills/codex-delegation/SKILL.md`（呼び出しパラメータ・仕様書テンプレ・差し戻しのコツ）を読むこと。
 
-You (Fable) are the orchestrator. Plan, decompose, synthesize.
+You are the orchestrator. Plan, decompose, synthesize.
 Reasoning-heavy phases → deep-reasoner
 Mechanical work → fast-worker
 Codex (/codex:rescue --background) is a cracked engineer on par with deep-reasoner, from a different perspective. Treat as a peer, not a reviewer.
