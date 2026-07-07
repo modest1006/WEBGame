@@ -236,10 +236,10 @@ class Game {
       const h = Math.min(acc, STEP);
       this.rawTime += h;
       this.audioBeat = beatAtTime(this.mode, this.rawTime);
+      const scale = this.currentTimeScale();
+      this.tick(h, scale);
       this.updateCinematics(h);
       if (this.state !== 'playing' && this.state !== 'levelup' && this.state !== 'dying') break;
-      const scale = this.currentTimeScale();
-      if (scale > 0) this.tick(h * scale);
       acc -= h;
     }
   }
@@ -259,37 +259,45 @@ class Game {
     }
   }
 
-  tick(dt) {
+  tick(dt, entityScale = 1) {
     this.time += dt;
     this.beat = beatAtTime(this.mode, this.time);
+    const gameplayActive = this.state === 'playing' && entityScale > 0;
 
     // 8分音符境界を横断したら発火
     const half = Math.floor(this.beat * 2);
     while (this.halfTick < half) {
       this.halfTick++;
-      this.onHalfTick(this.halfTick);
+      this.onHalfTick(this.halfTick, gameplayActive);
     }
 
     if (this.state !== 'playing') return; // levelup中はビートのみ進行
-
-    this.updatePlayer(dt);
-    this.updateEnemies(dt);
-    this.updateBullets(dt);
-    this.updateGems(dt);
-    this.spawnLogic(dt);
 
     if (!this.isEndless() && this.time >= SESSION_CLEAR_TIME && this.state === 'playing') this.finish('clear');
     if (this.isEndless() && !this.endlessTitleShown && this.time >= 600) {
       this.endlessTitleShown = true;
       this.emit('titlecard', { title: 'NIGHT RIDER' });
     }
+    if (!gameplayActive || this.state !== 'playing') return;
+
+    const scaledDt = dt * entityScale;
+    this.updatePlayer(scaledDt);
+    this.updateEnemies(scaledDt);
+    this.updateBullets(scaledDt);
+    this.updateGems(scaledDt);
+    this.spawnLogic(scaledDt);
   }
 
-  onHalfTick(ht) {
+  onHalfTick(ht, gameplayActive = true) {
     const onBeat = ht % 2 === 0;
     // levelup中はゲームプレイを発動せず、演出用のビートイベントだけ流す
     if (this.state === 'levelup') {
       this.emit(onBeat ? 'beat' : 'halfbeat', { index: ht / 2, ht });
+      return;
+    }
+    if (!gameplayActive) {
+      if (onBeat) this.emit('beat', { index: ht / 2 });
+      else this.emit('halfbeat', { ht });
       return;
     }
     // 残響攻撃（ノヴァ2連など）はビート境界で発動
