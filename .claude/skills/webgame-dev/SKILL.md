@@ -76,6 +76,13 @@ games/<game-name>/
 - `touch-action: none` や `preventDefault` でスクロール/ダブルタップズームの誤爆を防ぐ
 - viewport メタタグ必須。モバイル縦画面レイアウトを `preview_resize`（mobile）で必ず確認する
 
+## 3Dゲーム（Three.js）
+
+- `file://` 直開き規約と両立させるため、**Three.js r147のUMDビルド（three.min.js）をゲーム内 `lib/` に同梱**して通常scriptで読む（グローバル`THREE`が生える）。r148以降はESM専用なので使わない。CDN参照はオフラインで死ぬため不可
+- ロジック（物理・判定）は従来どおり `game.js` にThree非依存で実装し、renderer.jsだけがTHREEを触る。これで `__game.step()` によるヘッドレス検証がそのまま効く
+- `WebGLRenderer` は `preserveDrawingBuffer: true` で生成する（ヘッドレス検証の `canvas.toDataURL` に必須）
+- モバイルは `pixelRatio` 上限1.5・影テクスチャ1024以下に抑える
+
 ## セルフレビューの必須経路
 
 - **音声をunlockした状態でも一通り動かすこと。** `music.unlock()` / `sfx.unlock()` を呼ばないテストは全SFXコードが早期returnでスキップされ、SFX内のバグ（未定義メソッド等）を見逃す。AudioContextはユーザー操作なしでも生成でき（suspendedのまま）、コード経路の検証には十分
