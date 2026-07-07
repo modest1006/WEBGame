@@ -102,6 +102,7 @@ games/<game-name>/
 
 - Pagesは全ファイル `max-age=600` でキャッシュされるため、**デプロイ直後は新旧ファイル混在が起きる**。JS/CSSを変更したら index.html のアセット参照のバージョンクエリ（`?v=N`）を必ず上げること
 - 「反映されない」報告はまずキャッシュを疑う（マーカー文字列を `Invoke-WebRequest` で確認する）
+- **`?v=N` バンプにPowerShellの `Get-Content -Raw | -replace | Set-Content` を使わない**。BOMなしUTF-8の日本語ファイルをShift-JISで読んで文字化けさせ、そのままコミット・配信する事故が実際に起きた（petri/rollmazeで発生、grep '[ぁ-ん]' の消失で検出）。バンプは**Editツールの replace_all** で行うこと
 
 ## 起動登録・周辺更新
 

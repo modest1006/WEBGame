@@ -60,8 +60,24 @@
     rotatePaused = active;
     if (rotatePrompt) rotatePrompt.classList.toggle('hidden', !active);
   }
+  // 全画面: タッチ端末はSTART時に自動要求（ユーザー操作内でのみ許可される）＋手動トグル。
+  // 全画面中はscreen.orientation.lockで横向き固定を試みる（Android Chrome対応、失敗は無視）
+  function enterFullscreen() {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) return;
+    Promise.resolve(req.call(el)).then(function () {
+      if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {});
+    }).catch(function () {});
+  }
+  function toggleFullscreen() {
+    if (document.fullscreenElement) { if (document.exitFullscreen) document.exitFullscreen(); }
+    else enterFullscreen();
+  }
+  const isCoarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   new OneManInput(game, { anyInput: function () { audio.unlock(); }, start: startOrContinue, debug: debug.toggle, horn: horn }, $('brake-lever'));
-  $('start-btn').addEventListener('click', function () { audio.unlock(); startOrContinue(); });
+  $('start-btn').addEventListener('click', function () { audio.unlock(); if (isCoarse) enterFullscreen(); startOrContinue(); });
+  $('fs-btn').addEventListener('click', function () { toggleFullscreen(); });
   $('mute-btn').addEventListener('click', function () { audio.unlock(); audio.toggleMute(); $('mute-btn').textContent = audio.muted ? 'MUTED' : 'SOUND'; });
   if (hornBtn) hornBtn.addEventListener('click', horn);
   window.addEventListener('resize', function () { try { renderer.resize(); syncOrientationPrompt(); } catch (err) { console.error('[resize]', err); } });
