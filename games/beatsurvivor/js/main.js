@@ -12,6 +12,8 @@ const overlay = $('overlay');
 const levelupPanel = $('levelup');
 let endedAt = 0;
 let selectedMode = MODE_NORMAL;
+let overlayView = 'title';
+let pendingLoadout = { weapon: 'beatshot', passive: 'amp' };
 
 function fmtTime(t) {
   const m = Math.floor(t / 60);
@@ -24,18 +26,31 @@ function showOverlay(title, sub) {
   $('overlay-sub').innerHTML = sub;
   overlay.classList.remove('hidden');
   syncModeButtons();
+  animateChipCount();
 }
 
 function statLine(d) {
+  const chips = d.chipBreakdown;
+  const achievementLine = d.achievementsUnlocked?.length
+    ? '<br><span class="unlock-line">UNLOCK '
+      + d.achievementsUnlocked.map((id) => ACHIEVEMENTS.find((a) => a.id === id)?.name ?? id).join(' / ')
+      + '</span>'
+    : '';
+  const chipLine = chips ? '<br><br><span class="chip-breakdown">'
+    + `KILL ${chips.kills} / TIER ${chips.tier} / BOSS ${chips.boss} / SURVIVE ${chips.survival}`
+    + `</span><br><b class="chip-total" data-chip-count="${chips.total}">+0 CHIPS</b>`
+    + achievementLine
+    + '<br><button class="studio-link" data-open-studio="1">STUDIOで強化</button>' : '';
   if (d.mode === MODE_ENDLESS) {
     const best = d.bestTime ? `<br>BEST ${fmtTime(d.bestTime)}` : '';
     return `SURVIVAL ${fmtTime(d.time)} / KILLS ${d.kills} / SCORE ${d.score}<br>`
       + `MAX GROOVE x${(1 + Math.min(d.maxGroove ?? 0, GROOVE_MAX) * GROOVE_STEP).toFixed(2)} / BPM ${d.bpm ?? BPM}`
-      + best;
+      + best + chipLine;
   }
   return `TIME ${fmtTime(d.time)} / Lv${d.level} / KILLS ${d.kills}<br>`
     + `PERFECT ${d.perfect} / GOOD ${d.good} / MISS ${d.miss}<br>`
-    + `MAX GROOVE x${(1 + Math.min(d.maxGroove ?? 0, GROOVE_MAX) * GROOVE_STEP).toFixed(2)}`;
+    + `MAX GROOVE x${(1 + Math.min(d.maxGroove ?? 0, GROOVE_MAX) * GROOVE_STEP).toFixed(2)}`
+    + chipLine;
 }
 
 function modeSelectHtml() {
@@ -43,6 +58,76 @@ function modeSelectHtml() {
     + `<button class="mode-btn" data-mode="${MODE_NORMAL}">NORMAL<span>3:00 BOSS / 5:00 CLEAR</span></button>`
     + `<button class="mode-btn" data-mode="${MODE_ENDLESS}">ENDLESS<span>SURVIVE UNTIL DEATH</span></button>`
     + '</div>';
+}
+
+function titleHtml() {
+  const meta = normalizeMeta(game.meta);
+  return `<div class="chip-wallet">NEON CHIPS <b>${meta.chips}</b></div>`
+    + modeSelectHtml()
+    + '<div class="title-actions">'
+    + '<button class="studio-link" data-start-run="1">PLAY</button>'
+    + '<button class="studio-link" data-open-studio="1">STUDIO</button>'
+    + '<button class="studio-link" data-open-achievements="1">ACHIEVEMENTS</button>'
+    + '</div>'
+    + 'WASD/矢印: MOVE　<b>SPACE: DASH</b><br>'
+    + 'Beat-perfect dashes raise <b>GROOVE</b>. Build your sound system between runs.';
+}
+
+function studioHtml() {
+  const meta = normalizeMeta(game.meta);
+  const rack = META_GEAR.map((g, i) => {
+    const lv = gearLevel(meta, g.id);
+    return `<span class="rack-unit ${lv > 0 ? 'on' : ''}" style="--i:${i}"><b>${lv}</b></span>`;
+  }).join('');
+  const list = META_GEAR.map((g) => {
+    const lv = gearLevel(meta, g.id);
+    const next = lv + 1;
+    const cost = gearCost(g.id, next);
+    const canBuy = lv < 3 && meta.chips >= cost;
+    return '<div class="gear-row">'
+      + `<div><span class="gear-cat">${g.category}</span><b>${g.name}</b><em>Lv ${lv}/3</em>`
+      + `<small>${g.effect}<br>${g.flavor}</small></div>`
+      + (lv >= 3 ? '<span class="gear-max">MAX</span>' : `<button class="buy-btn" data-buy-gear="${g.id}" ${canBuy ? '' : 'disabled'}>${cost}</button>`)
+      + '</div>';
+  }).join('');
+  return `<div class="chip-wallet">NEON CHIPS <b>${meta.chips}</b></div>`
+    + `<div class="studio-grid"><div class="dj-booth">${rack}<div class="booth-deck"></div></div><div class="gear-list">${list}</div></div>`
+    + '<div class="title-actions"><button class="studio-link" data-back-title="1">TITLE</button><button class="studio-link" data-open-achievements="1">ACHIEVEMENTS</button></div>';
+}
+
+function achievementsHtml() {
+  const unlocked = new Set(normalizeMeta(game.meta).achievements);
+  const list = ACHIEVEMENTS.map((a) => `<div class="achievement ${unlocked.has(a.id) ? 'on' : ''}">`
+    + `<b>${unlocked.has(a.id) ? a.name : '????'}</b><span>${unlocked.has(a.id) ? a.reward : 'SILHOUETTE'}</span></div>`).join('');
+  return `<div class="achievements-list">${list}</div>`
+    + '<div class="title-actions"><button class="studio-link" data-back-title="1">TITLE</button><button class="studio-link" data-open-studio="1">STUDIO</button></div>';
+}
+
+function loadoutHtml() {
+  const recordLv = gearLevel(game.meta, 'record_bag');
+  const weaponBtns = Object.entries(WEAPONS).map(([key, def]) =>
+    `<button class="loadout-btn ${pendingLoadout.weapon === key ? 'active' : ''}" data-loadout-weapon="${key}">${def.icon}<span>${def.name}</span></button>`).join('');
+  const passiveBtns = recordLv >= 3 ? '<div class="loadout-group">'
+    + Object.entries(PASSIVES).map(([key, def]) =>
+      `<button class="loadout-btn small ${pendingLoadout.passive === key ? 'active' : ''}" data-loadout-passive="${key}">${def.icon}<span>${def.name}</span></button>`).join('')
+    + '</div>' : '';
+  return `<p class="loadout-note">RECORD BAG Lv${recordLv} / First track setup</p>`
+    + `<div class="loadout-group">${weaponBtns}</div>`
+    + passiveBtns
+    + '<button class="studio-link" data-confirm-loadout="1">START</button>';
+}
+
+function animateChipCount() {
+  const el = overlay.querySelector('[data-chip-count]');
+  if (!el) return;
+  const total = Number(el.dataset.chipCount) || 0;
+  const start = performance.now();
+  const tick = () => {
+    const k = Math.min(1, (performance.now() - start) / 650);
+    el.textContent = `+${Math.floor(total * k)} CHIPS`;
+    if (k < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 function settingsHtml() {
@@ -100,6 +185,29 @@ function syncOverlay() {
 }
 
 // レベルアップカードはビートに合わせて1枚ずつ「ドン」と登場する
+function syncOverlay() {
+  levelupPanel.classList.toggle('hidden', game.state !== 'levelup');
+  switch (game.state) {
+    case 'title':
+      if (overlayView === 'studio') showOverlay('STUDIO', studioHtml());
+      else if (overlayView === 'achievements') showOverlay('ACHIEVEMENTS', achievementsHtml());
+      else if (overlayView === 'loadout') showOverlay('SELECT<br>TRACK', loadoutHtml());
+      else showOverlay('BEAT<br>SURVIVOR', titleHtml());
+      break;
+    case 'paused':
+      showOverlay('PAUSE', settingsHtml() + 'P / Esc to resume');
+      break;
+    case 'dead':
+      showOverlay('GAME OVER', statLine(game.lastEnd ?? {}) + '<br><br>Press any key / tap to retry');
+      break;
+    case 'clear':
+      showOverlay('STAGE CLEAR!', statLine(game.lastEnd ?? {}) + '<br><br>Press any key / tap to play again');
+      break;
+    default:
+      overlay.classList.add('hidden');
+  }
+}
+
 let cardQueue = [];
 function renderLevelup(choices) {
   const box = $('levelup-cards');
@@ -193,9 +301,17 @@ const actions = {
   debug: () => debugOverlay.toggle(),
   anyInput: () => {
     music.unlock();
-    if (game.state === 'title') { game.start(selectedMode); syncOverlay(); }
+    if (game.state === 'title') {
+      if (overlayView === 'title') {
+        if (gearLevel(game.meta, 'record_bag') > 0) overlayView = 'loadout';
+        else game.start(selectedMode);
+        syncOverlay();
+      }
+    }
     else if ((game.state === 'dead' || game.state === 'clear') && performance.now() - endedAt > 800) {
-      game.start(selectedMode);
+      overlayView = 'title';
+      if (gearLevel(game.meta, 'record_bag') > 0) overlayView = 'loadout';
+      else game.start(selectedMode);
       syncOverlay();
     }
   },
@@ -210,6 +326,50 @@ overlay.addEventListener('pointerdown', (e) => {
   selectedMode = modeBtn.dataset.mode === MODE_ENDLESS ? MODE_ENDLESS : MODE_NORMAL;
   game.setMode(selectedMode);
   syncModeButtons();
+});
+overlay.addEventListener('pointerdown', (e) => {
+  const handled = e.target.closest('[data-open-studio],[data-open-achievements],[data-back-title],[data-start-run],[data-confirm-loadout],[data-loadout-weapon],[data-loadout-passive],[data-buy-gear]');
+  if (!handled) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (handled.dataset.openStudio) {
+    if (game.state === 'dead' || game.state === 'clear') game.state = 'title';
+    overlayView = 'studio';
+  } else if (handled.dataset.openAchievements) {
+    if (game.state === 'dead' || game.state === 'clear') game.state = 'title';
+    overlayView = 'achievements';
+  } else if (handled.dataset.backTitle) {
+    if (game.state === 'dead' || game.state === 'clear') game.state = 'title';
+    overlayView = 'title';
+  }
+  else if (handled.dataset.startRun) {
+    music.unlock();
+    if (gearLevel(game.meta, 'record_bag') > 0) overlayView = 'loadout';
+    else game.start(selectedMode);
+  } else if (handled.dataset.loadoutWeapon) {
+    pendingLoadout.weapon = handled.dataset.loadoutWeapon;
+  } else if (handled.dataset.loadoutPassive) {
+    pendingLoadout.passive = handled.dataset.loadoutPassive;
+  } else if (handled.dataset.confirmLoadout) {
+    music.unlock();
+    game.start(selectedMode, pendingLoadout);
+  } else if (handled.dataset.buyGear) {
+    const id = handled.dataset.buyGear;
+    const save = updateBeatSurvivorSave((s) => {
+      s.meta = normalizeMeta(s.meta);
+      const lv = gearLevel(s.meta, id);
+      const cost = gearCost(id, lv + 1);
+      if (lv >= 3 || s.meta.chips < cost) return;
+      s.meta.chips -= cost;
+      s.meta.gear[id] = lv + 1;
+      if (isRackComplete(s.meta) && !s.meta.achievements.includes('rack_complete')) s.meta.achievements.push('rack_complete');
+    });
+    game.save = save;
+    game.meta = normalizeMeta(save.meta);
+    handled.classList.add('installed');
+    music.sfx('cardin');
+  }
+  syncOverlay();
 });
 overlay.addEventListener('pointerdown', (e) => {
   const settingBtn = e.target.closest('[data-setting]');

@@ -134,6 +134,77 @@ function beatAtTime(mode, t) {
   return OVERDRIVE_TIME * (BPM / 60) + rampBeats + (t - rampEnd) * (BPM_MAX / 60);
 }
 
+const META_GEAR = [
+  { id: 'power_core', category: 'POWER', name: '安定化電源', effect: '最大HP +10/20/30', flavor: '電源が細いと音が痩せる', costs: [160, 420, 900] },
+  { id: 'ups', category: 'POWER', name: '無停電電源', effect: '死亡時1回だけ復活 / 無敵 / ノヴァ', flavor: 'ライブは止められない', costs: [160, 420, 900] },
+  { id: 'isolator', category: 'POWER', name: 'アイソレーター', effect: '被ダメージ -5/10/15%', flavor: 'ノイズをぶった斬る', costs: [160, 420, 900] },
+  { id: 'tube_amp', category: 'OUTPUT', name: '真空管アンプ', effect: '全ダメージ +6/12/18%', flavor: '歪みこそ味', costs: [160, 420, 900] },
+  { id: 'tweeter', category: 'OUTPUT', name: 'ツイーター', effect: 'ビートショット弾速/貫通/弾数', flavor: '高音は正義', costs: [160, 420, 900] },
+  { id: 'bass_reflex', category: 'OUTPUT', name: 'バスレフ箱', effect: 'ノヴァ半径 +10/20/30%', flavor: '箱鳴りで押し出す低域', costs: [160, 420, 900] },
+  { id: 'record_bag', category: 'SELECT', name: 'レコードバッグ', effect: '開始武器選択 / Lv2開始 / パッシブ', flavor: '今夜の1枚目', costs: [160, 420, 900] },
+  { id: 'metro_clock', category: 'SELECT', name: 'メトロノーム時計', effect: 'PERFECT判定 +8/16/24ms', flavor: '体内時計を鍛える', costs: [160, 420, 900] },
+  { id: 'booth_monitor', category: 'SELECT', name: 'ブースモニター', effect: 'GROOVE減衰 +2/4/6ビート猶予', flavor: '自分の音が聴こえりゃ外さない', costs: [160, 420, 900] },
+];
+
+const ACHIEVEMENTS = [
+  { id: 'stage_clear', name: '初ステージクリア', reward: 'ENDLESSモード解放' },
+  { id: 'groove_max', name: 'GROOVE MAX到達', reward: 'タイトルBGMレイヤー追加' },
+  { id: 'endless_5', name: 'エンドレス5:00', reward: '機体色バリエーション' },
+  { id: 'night_rider', name: 'エンドレス10:00', reward: 'NIGHT RIDER称号' },
+  { id: 'boss_triple', name: 'ボス3周回撃破', reward: '隠し色' },
+  { id: 'rack_complete', name: 'サウンドシステム完成', reward: 'ラック完成ランプ' },
+];
+
+function defaultMeta() {
+  const gear = {};
+  for (const g of META_GEAR) gear[g.id] = 0;
+  return { chips: 0, gear, achievements: [] };
+}
+
+function normalizeMeta(meta) {
+  const base = defaultMeta();
+  const srcGear = meta?.gear ?? {};
+  for (const g of META_GEAR) {
+    base.gear[g.id] = Math.max(0, Math.min(3, Math.floor(Number(srcGear[g.id]) || 0)));
+  }
+  base.chips = Math.max(0, Math.floor(Number(meta?.chips) || 0));
+  const known = new Set(ACHIEVEMENTS.map((a) => a.id));
+  base.achievements = Array.isArray(meta?.achievements)
+    ? [...new Set(meta.achievements.filter((id) => known.has(id)))]
+    : [];
+  return base;
+}
+
+function gearLevel(meta, id) {
+  return Math.max(0, Math.min(3, Number(meta?.gear?.[id]) || 0));
+}
+
+function gearCost(id, nextLevel) {
+  const gear = META_GEAR.find((g) => g.id === id);
+  if (!gear || nextLevel < 1 || nextLevel > 3) return Infinity;
+  return gear.costs[nextLevel - 1];
+}
+
+function calculateChipReward(run) {
+  const kills = Math.max(0, Math.floor(Number(run.kills) || 0));
+  const maxGroove = Math.max(0, Math.floor(Number(run.maxGroove) || 0));
+  const tier = grooveTierOf(maxGroove);
+  const bossRankSum = Math.max(0, Math.floor(Number(run.bossRankSum) || 0));
+  const survivalSteps = Math.max(0, Math.floor((Number(run.time) || 0) / 30));
+  const breakdown = {
+    kills,
+    tier: tier * 50,
+    boss: bossRankSum * 300,
+    survival: survivalSteps * 10,
+  };
+  breakdown.total = breakdown.kills + breakdown.tier + breakdown.boss + breakdown.survival;
+  return breakdown;
+}
+
+function isRackComplete(meta) {
+  return META_GEAR.every((g) => gearLevel(meta, g.id) >= 3);
+}
+
 
 function defaultBeatSurvivorSave() {
   return {
@@ -144,6 +215,7 @@ function defaultBeatSurvivorSave() {
       reducedFlash: false,
       volumes: { bgm: 1, sfx: 1, judge: 1 },
     },
+    meta: defaultMeta(),
   };
 }
 
@@ -165,6 +237,7 @@ function normalizeBeatSurvivorSave(data) {
         judge: Math.max(0, Math.min(1, Number(data.settings?.volumes?.judge ?? 1))),
       },
     },
+    meta: normalizeMeta(data.meta),
   };
 }
 

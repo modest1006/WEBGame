@@ -62,6 +62,36 @@ function installDebug(game) {
     setGroove: (n) => { game.setGrooveValue(Number(n) || 0, 'debug'); game.lastPerfectBeat = game.beat; },
     setHp: (n) => { game.p.hp = n; },
     teleport: (x, y) => { game.p.x = x; game.p.y = y; },
+    giveChips: (n) => {
+      const save = updateBeatSurvivorSave((s) => {
+        s.meta = normalizeMeta(s.meta);
+        s.meta.chips = Math.max(0, s.meta.chips + Math.floor(Number(n) || 0));
+      });
+      game.save = save; game.meta = normalizeMeta(save.meta);
+      return game.meta.chips;
+    },
+    buyGear: (id) => {
+      const save = updateBeatSurvivorSave((s) => {
+        s.meta = normalizeMeta(s.meta);
+        const lv = gearLevel(s.meta, id);
+        const cost = gearCost(id, lv + 1);
+        if (lv >= 3 || s.meta.chips < cost) return;
+        s.meta.chips -= cost;
+        s.meta.gear[id] = lv + 1;
+        if (isRackComplete(s.meta) && !s.meta.achievements.includes('rack_complete')) s.meta.achievements.push('rack_complete');
+      });
+      game.save = save; game.meta = normalizeMeta(save.meta);
+      return { chips: game.meta.chips, level: gearLevel(game.meta, id) };
+    },
+    unlockAll: () => {
+      const save = updateBeatSurvivorSave((s) => {
+        s.meta = normalizeMeta(s.meta);
+        for (const g of META_GEAR) s.meta.gear[g.id] = 3;
+        s.meta.achievements = ACHIEVEMENTS.map((a) => a.id);
+      });
+      game.save = save; game.meta = normalizeMeta(save.meta);
+      return game.meta;
+    },
     benchSeparation(iter = 200) {
       const saved = game.enemies.map((e) => ({ ...e }));
       const fill = () => {

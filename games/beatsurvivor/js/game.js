@@ -8,6 +8,8 @@ class Game {
     this.mode = MODE_NORMAL;
     this.save = loadBeatSurvivorSave();
     this.settings = { ...this.save.settings };
+    this.meta = normalizeMeta(this.save.meta);
+    this.startLoadout = {};
     this.ctrl = { mx: 0, my: 0 }; // 移動入力（-1..1、input.jsが書き込む）
     this.resetRun();
   }
@@ -40,13 +42,14 @@ class Game {
     this.gems = [];
     this.weapons = { beatshot: 1 };
     this.passives = { amp: 0, speaker: 0, footwork: 0, battery: 0, metronome: 0 };
+    this.runReviveUsed = false;
     this.level = 1;
     this.xp = 0;
     this.groove = 0;
     this.maxGrooveSeen = false;
     this.lastPerfectBeat = 0;
     this.kills = 0;
-    this.stats = { perfect: 0, good: 0, miss: 0, maxGroove: 0, dmgDealt: 0 };
+    this.stats = { perfect: 0, good: 0, miss: 0, maxGroove: 0, dmgDealt: 0, bossRankSum: 0 };
     this.pendingLevels = 0;
     this.choices = [];
     this.spawnAcc = 0;
@@ -68,6 +71,7 @@ class Game {
     this.nextBossTime = BOSS_TIME;
     this.endlessTitleShown = false;
     this.nextId = 1;
+    this.applyMetaLoadout();
   }
 
   setMode(mode) {
@@ -76,8 +80,9 @@ class Game {
     return this.mode;
   }
 
-  start(mode = this.mode) {
+  start(mode = this.mode, loadout = {}) {
     this.mode = mode === MODE_ENDLESS ? MODE_ENDLESS : MODE_NORMAL;
+    this.startLoadout = loadout || {};
     this.resetRun();
     this.state = 'playing';
     this.emit('start', { mode: this.mode });
@@ -105,14 +110,32 @@ class Game {
     return true;
   }
 
+  applyMetaLoadout() {
+    const recordLv = this.gearLv('record_bag');
+    if (recordLv > 0) {
+      const weapon = WEAPONS[this.startLoadout?.weapon] ? this.startLoadout.weapon : 'beatshot';
+      this.weapons = { [weapon]: recordLv >= 2 ? 2 : 1 };
+      if (recordLv >= 3) {
+        const passive = PASSIVES[this.startLoadout?.passive] ? this.startLoadout.passive : 'amp';
+        this.passives[passive] = Math.max(this.passives[passive] || 0, 1);
+      }
+    }
+    const hpBonus = this.gearLv('power_core') * 10;
+    if (hpBonus > 0) {
+      this.p.maxHp += hpBonus;
+      this.p.hp = this.p.maxHp;
+    }
+  }
+
   grooveMult() { return 1 + Math.min(this.groove, GROOVE_MAX) * GROOVE_STEP; }
   tier() { return grooveTierOf(this.groove); }
   isAccent() { return this.beat < this.accentUntil; }
-  dmgMult() { return this.grooveMult() * (1 + this.passives.amp * 0.15); }
+  gearLv(id) { return gearLevel(this.meta, id); }
+  dmgMult() { return this.grooveMult() * (1 + this.passives.amp * 0.15 + this.gearLv('tube_amp') * 0.06); }
   attackMult() { return this.dmgMult() * (this.isAccent() ? ACCENT_MULT : 1); }
   moveSpeed() { return PLAYER.speed * (1 + this.passives.footwork * 0.12); }
   pickupR() { return PLAYER.pickupRadius * (1 + this.passives.speaker * 0.45); }
-  perfectWindow() { return PERFECT_MS + this.passives.metronome * 25; }
+  perfectWindow() { return PERFECT_MS + this.passives.metronome * 25 + this.gearLv('metro_clock') * 8; }
   currentBpm() { return bpmForTime(this.mode, this.time); }
   currentBeatMs() { return 60000 / this.currentBpm(); }
   audioBpm() { return bpmForTime(this.mode, this.rawTime); }
@@ -289,7 +312,7 @@ class Game {
     if (this.weapons.nova && beatIndex % WEAPONS.nova.everyBeats === 0) this.fireNova();
 
     // GROOVE減衰: PERFECTが途切れると1ビートごとに減衰
-    if (this.groove > 0 && this.beat - this.lastPerfectBeat > GROOVE_DECAY_BEATS) {
+    if (this.groove > 0 && this.beat - this.lastPerfectBeat > GROOVE_DECAY_BEATS + this.gearLv('booth_monitor') * 2) {
       this.setGrooveValue(this.groove - GROOVE_DECAY_PER_BEAT, 'decay');
       this.emit('groovedecay', { groove: this.groove });
     }
@@ -434,10 +457,14 @@ class Game {
 
       // プレイヤー接触ダメージ
       if (p.hurtCd <= 0 && p.iframe <= 0 && d < e.r + p.r) {
-        p.hp -= e.dmg;
+        const dmg = e.dmg * (1 - this.gearLv('isolator') * 0.05);
+        p.hp -= dmg;
         p.hurtCd = PLAYER.hurtCooldown;
-        this.emit('hurt', { dmg: e.dmg, hp: p.hp });
-        if (p.hp <= 0) { this.startDeath(); return; }
+        this.emit('hurt', { dmg, hp: p.hp });
+        if (p.hp <= 0) {
+          if (this.tryRevive()) return;
+          this.startDeath(); return;
+        }
       }
     }
     this.separateEnemiesGrid();
@@ -522,9 +549,24 @@ class Game {
     this.gems.push({ x: e.x, y: e.y, xp: e.xp, vx: 0, vy: 0 });
     this.emit('kill', { x: e.x, y: e.y, type: e.type, groove: this.groove });
     if (e.type === 'boss') {
+      this.stats.bossRankSum += this.isEndless() ? Math.max(1, this.bossSpawns) : 1;
       this.bossRef = null;
       this.startBossDefeat(e);
     }
+  }
+
+  tryRevive() {
+    const lv = this.gearLv('ups');
+    if (lv <= 0 || this.runReviveUsed) return false;
+    this.runReviveUsed = true;
+    this.p.hp = 30;
+    if (lv >= 2) this.p.iframe = Math.max(this.p.iframe, 1);
+    if (lv >= 3) {
+      this.areaDamage(this.p.x, this.p.y, 190, 28 * this.dmgMult(), 220);
+      this.emit('nova', { radius: 190, accent: true });
+    }
+    this.emit('revive', { hp: this.p.hp, level: lv });
+    return true;
   }
 
   startBossDefeat(e) {
@@ -610,6 +652,43 @@ class Game {
       this.echoQueue.push({
         at: this.halfTick + 1, x: this.p.x, y: this.p.y,
         radius: conf.radius * 0.8, dmg: conf.dmg * 0.6 * this.attackMult(), kb: 100,
+      });
+    }
+  }
+
+  fireBeatshot() {
+    const conf = WEAPONS.beatshot.lv[this.weapons.beatshot - 1];
+    const tier = this.tier();
+    const accent = this.isAccent();
+    const tw = this.gearLv('tweeter');
+    const count = conf.count + (tier >= 1 ? 1 : 0) + (tw >= 3 ? 1 : 0);
+    const targets = this.nearestEnemies(count);
+    if (targets.length === 0) return;
+    for (const t of targets) {
+      const dx = t.x - this.p.x, dy = t.y - this.p.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const speed = 540 * (tw >= 1 ? 1.2 : 1);
+      this.bullets.push({
+        x: this.p.x, y: this.p.y,
+        vx: (dx / d) * speed, vy: (dy / d) * speed,
+        dmg: conf.dmg * this.attackMult(), life: 1.4,
+        r: accent ? 7.5 : 5,
+        pierce: (tier >= 3 ? 2 : 1) + (tw >= 2 ? 1 : 0),
+      });
+    }
+    this.emit('shot', { count: targets.length, accent });
+  }
+
+  fireNova() {
+    const conf = WEAPONS.nova.lv[this.weapons.nova - 1];
+    const accent = this.isAccent();
+    const radius = conf.radius * (1 + this.gearLv('bass_reflex') * 0.1);
+    this.areaDamage(this.p.x, this.p.y, radius, conf.dmg * this.attackMult(), 140);
+    this.emit('nova', { radius, accent });
+    if (this.tier() >= 2) {
+      this.echoQueue.push({
+        at: this.halfTick + 1, x: this.p.x, y: this.p.y,
+        radius: radius * 0.8, dmg: conf.dmg * 0.6 * this.attackMult(), kb: 100,
       });
     }
   }
@@ -778,24 +857,44 @@ class Game {
     return true;
   }
 
+  achievementsForResult(result) {
+    const ids = [];
+    if (!this.isEndless() && result === 'clear') ids.push('stage_clear');
+    if (this.stats.maxGroove >= GROOVE_MAX) ids.push('groove_max');
+    if (this.isEndless() && this.time >= 300) ids.push('endless_5');
+    if (this.isEndless() && this.time >= 600) ids.push('night_rider');
+    if (this.isEndless() && this.stats.bossRankSum >= 1 + 2 + 3) ids.push('boss_triple');
+    if (isRackComplete(this.meta)) ids.push('rack_complete');
+    return ids;
+  }
+
   finish(result) {
     this.state = result;
     const bpm = this.currentBpm();
-    let save = loadBeatSurvivorSave();
-    if (this.isEndless() && result === 'dead') {
-      save = updateBeatSurvivorSave((s) => {
-        s.best.endlessTime = Math.max(s.best.endlessTime || 0, Math.floor(this.time));
-        s.settings = { ...this.settings };
-      });
-    } else if (!this.isEndless() && result === 'clear') {
-      save = updateBeatSurvivorSave((s) => {
-        s.best.normalTime = Math.max(s.best.normalTime || 0, Math.floor(this.time));
-        s.settings = { ...this.settings };
-      });
-    }
+    const chipBreakdown = calculateChipReward({
+      kills: this.kills,
+      maxGroove: this.stats.maxGroove,
+      bossRankSum: this.stats.bossRankSum,
+      time: this.time,
+    });
+    const unlocked = this.achievementsForResult(result);
+    const save = updateBeatSurvivorSave((s) => {
+      if (this.isEndless() && result === 'dead') s.best.endlessTime = Math.max(s.best.endlessTime || 0, Math.floor(this.time));
+      if (!this.isEndless() && result === 'clear') s.best.normalTime = Math.max(s.best.normalTime || 0, Math.floor(this.time));
+      s.settings = { ...this.settings };
+      s.meta = normalizeMeta(s.meta);
+      s.meta.chips += chipBreakdown.total;
+      for (const id of unlocked) {
+        if (!s.meta.achievements.includes(id)) s.meta.achievements.push(id);
+      }
+    });
+    this.save = save;
+    this.meta = normalizeMeta(save.meta);
     const data = {
       time: Math.round(this.time), level: this.level, kills: this.kills,
       mode: this.mode, score: this.score(), bpm: Math.round(bpm), bestTime: save.best.endlessTime || 0,
+      chips: chipBreakdown.total, chipBreakdown, achievementsUnlocked: unlocked,
+      meta: this.meta,
       ...this.stats,
     };
     this.lastEnd = data;
@@ -832,6 +931,7 @@ class Game {
       enemies: this.enemies.length, bullets: this.bullets.length, gems: this.gems.length,
       weapons: { ...this.weapons }, passives: { ...this.passives },
       settings: { ...this.settings },
+      meta: normalizeMeta(this.meta),
       boss: this.bossRef ? { hp: Math.round(this.bossRef.hp), x: Math.round(this.bossRef.x), y: Math.round(this.bossRef.y) } : null,
       pendingLevels: this.pendingLevels,
       choices: this.choices.map((c) => `${c.name} Lv${c.lv}`),
