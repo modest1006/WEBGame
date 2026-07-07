@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>培養シャーレ PETRI</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css?v=2">
+</head>
+<body>
+  <main class="app">
+    <aside class="panel">
+      <h1>培養シャーレ PETRI</h1>
+      <p>菌種のルール差で縄張りが変わる放置観察ゲームです。</p>
+      <section class="stats">
+        <div class="stat"><span>世代</span><b id="gen">0</b></div>
+        <div class="stat"><span>人口</span><b id="pop">0</b></div>
+        <div class="stat"><span>胞子pt</span><b id="spores">0</b></div>
+        <div class="stat"><span>図鑑</span><b id="codex">0 / 0</b></div>
+      </section>
+      <h2>スポイトゲージ</h2>
+      <div class="gauge"><i id="gauge"></i></div>
+      <h2>介入ツール</h2>
+      <div class="tools">
+        <button type="button" data-tool="nutrient" class="active">栄養滴下</button>
+        <button type="button" data-tool="wall">仕切り棒</button>
+        <button type="button" data-tool="stir">かき混ぜ</button>
+      </div>
+      <div class="run">
+        <button id="pause-btn" type="button">一時停止</button>
+        <button id="speed-btn" type="button">通常</button>
+        <button id="mute-btn" type="button">音あり</button>
+        <button id="debug-btn" type="button">DEBUG</button>
+        <button id="reset-btn" type="button">培地リセット</button>
+      </div>
+    </aside>
+    <section class="dish-wrap">
+      <canvas id="view" aria-label="PETRI culture dish"></canvas>
+      <div class="hud">
+        <div class="chip">クリック/タップで介入</div>
+        <div class="chip">M: ミュート / Space: 一時停止</div>
+      </div>
+      <div id="ticker" class="ticker"></div>
+    </section>
+    <aside class="panel">
+      <h2>菌種選択</h2>
+      <div id="species-list" class="species-list"></div>
+      <h2>菌種シェア</h2>
+      <div id="share" class="share"></div>
+      <h2>新種図鑑</h2>
+      <ol id="codex-list" class="codex-list"></ol>
+    </aside>
+  </main>
+  <section id="modal" class="modal hidden">
+    <div class="paper">
+      <h2 id="modal-title">るす中レポート</h2>
+      <p id="modal-text"></p>
+      <button id="modal-close" type="button">観察にもどる</button>
+    </div>
+  </section>
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+  <script src="js/game.js?v=2"></script>
+  <script src="js/renderer.js?v=2"></script>
+  <script src="js/input.js?v=2"></script>
+  <script src="js/audio.js?v=2"></script>
+  <script src="js/debug.js?v=2"></script>
+  <script src="js/main.js?v=2"></script>
+</body>
+</html>

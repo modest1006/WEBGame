@@ -18,6 +18,7 @@
 | [HELLBREAK](games/hellbreak/) | FPS | 90年代スタイルのレトロFPS。悪魔の要塞3レベルを突破（Three.js） |
 | [コロガリ魂](games/korogari/) | 3Dアクション | 粘着ボールで画鋲からトラックまで巻き込んで成長（Three.js） |
 | [星喰い](games/hoshikui/) | 3Dアクション | 岩石から始めて公転する星々を喰らい、ブラックホールへ進化（Three.js） |
+| [培養シャーレ PETRI](games/petri/) | 放置×ライフゲーム | 異なるCAルールの菌たちが縄張りを争う観察ゲー。パターン自然発生で図鑑登録 |
 
 ## 遊び方
 
