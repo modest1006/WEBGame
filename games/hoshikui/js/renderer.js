@@ -8,6 +8,91 @@
     return new THREE.MeshStandardMaterial(opt);
   }
   function glowMat(hex, opacity){ return new THREE.MeshBasicMaterial({ color:hex, transparent:true, opacity:opacity, blending:THREE.AdditiveBlending, depthWrite:false }); }
+  function blackHoleMaterial(){
+    return new THREE.ShaderMaterial({
+      transparent:true,
+      depthWrite:false,
+      depthTest:true,
+      uniforms:{ time:{ value:0 }, doppler:{ value:.62 }, massScale:{ value:1 } },
+      vertexShader:[
+        'varying vec2 vUv;',
+        'void main(){',
+        '  vUv = uv;',
+        '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+        '}'
+      ].join('\n'),
+      fragmentShader:[
+        'precision mediump float;',
+        'uniform float time;',
+        'uniform float doppler;',
+        'uniform float massScale;',
+        'varying vec2 vUv;',
+        'float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }',
+        'float noise(vec2 p){',
+        '  vec2 i=floor(p), f=fract(p);',
+        '  f=f*f*(3.0-2.0*f);',
+        '  float a=hash(i), b=hash(i+vec2(1.0,0.0)), c=hash(i+vec2(0.0,1.0)), d=hash(i+vec2(1.0,1.0));',
+        '  return mix(mix(a,b,f.x), mix(c,d,f.x), f.y);',
+        '}',
+        'float fbm(vec2 p){',
+        '  float v=0.0, a=.5;',
+        '  for(int i=0;i<4;i++){ v += a * noise(p); p *= 2.03; a *= .5; }',
+        '  return v;',
+        '}',
+        'float band(float d, float w){ return exp(-d*d/(w*w)); }',
+        'void main(){',
+        '  vec2 p = (vUv - .5) * 2.0;',
+        '  vec2 q = p;',
+        '  q.x *= 1.28;',
+        '  float r = length(p);',
+        '  float rq = length(q);',
+        '  float th = atan(q.y, q.x);',
+        '  float shadow = .255;',
+        '  float outer = 1.12;',
+        '  float spin = th * 5.5 + time * 1.45;',
+        '  float streak = fbm(vec2(spin, r * 7.0 - time * .35));',
+        '  streak = smoothstep(.18, 1.0, streak);',
+        '  float beam = 1.0 + doppler * smoothstep(-.95, .95, q.x) - doppler * .34 * smoothstep(.15, 1.0, -q.x);',
+        '  vec3 hot = vec3(1.0, .86, .50);',
+        '  vec3 orange = vec3(1.0, .43, .08);',
+        '  vec3 red = vec3(.44, .07, .015);',
+        '  vec3 col = vec3(0.0);',
+        '  float alpha = 0.0;',
+        '  float diskRad = abs(q.x);',
+        '  float diskMask = smoothstep(shadow*.95, shadow*1.35, diskRad) * (1.0 - smoothstep(.95, outer, diskRad));',
+        '  float diskThin = band(q.y + .012 * sin(th * 7.0 + time), .075 + .035 * smoothstep(.45, 1.0, diskRad));',
+        '  float heat = pow(1.0 - smoothstep(shadow*.9, outer, diskRad), 1.35);',
+        '  float disk = diskMask * diskThin * (.62 + .72 * streak) * beam;',
+        '  vec3 diskColor = mix(red, orange, heat);',
+        '  diskColor = mix(diskColor, hot, pow(heat, 2.2));',
+        '  col += diskColor * disk * 1.18;',
+        '  alpha = max(alpha, clamp(disk, 0.0, 1.0));',
+        '  float eTop = sqrt((q.x/.74)*(q.x/.74) + ((q.y+.045)/.42)*((q.y+.045)/.42));',
+        '  float topArc = band(eTop - 1.0, .038) * smoothstep(.03, .18, q.y) * (1.0 - smoothstep(.98, 1.24, abs(q.x)));',
+        '  topArc *= (.82 + .55 * fbm(vec2(th*4.0 + time*.9, eTop*8.0)));',
+        '  topArc *= 1.0 + doppler * .38 * smoothstep(-.65, .75, q.x);',
+        '  col += mix(orange, hot, .52) * topArc * 1.45;',
+        '  alpha = max(alpha, clamp(topArc * .95, 0.0, 1.0));',
+        '  float eBot = sqrt((q.x/.64)*(q.x/.64) + ((q.y-.02)/.27)*((q.y-.02)/.27));',
+        '  float botArc = band(eBot - 1.0, .030) * smoothstep(.02, .20, -q.y) * (1.0 - smoothstep(.78, 1.08, abs(q.x)));',
+        '  botArc *= (.66 + .45 * fbm(vec2(th*4.0 - time*.7, eBot*8.0)));',
+        '  col += mix(red, orange, .72) * botArc * .95;',
+        '  alpha = max(alpha, clamp(botArc * .82, 0.0, 1.0));',
+        '  float photon = band(r - shadow, .010) * (1.0 + .26 * sin(th * 11.0 + time * 2.0));',
+        '  col += vec3(1.0, .88, .58) * photon * 1.65;',
+        '  alpha = max(alpha, clamp(photon, 0.0, 1.0));',
+        '  float glow = exp(-rq*rq/1.15) * .20 + diskThin * diskMask * .16;',
+        '  col += vec3(1.0, .38, .08) * glow;',
+        '  alpha = max(alpha, glow * .55);',
+        '  float shadowEdge = smoothstep(shadow + .018, shadow - .006, r);',
+        '  col = mix(col, vec3(0.0), shadowEdge);',
+        '  alpha = max(alpha, shadowEdge);',
+        '  alpha *= 1.0 - smoothstep(1.18, 1.34, rq);',
+        '  gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));',
+        '}'
+      ].join('\n')
+    });
+  }
   function HoshikuiRenderer(canvas) {
     this.canvas=canvas; this.scene=new THREE.Scene(); this.scene.fog=new THREE.FogExp2(0x050714,.010);
     this.camera=new THREE.PerspectiveCamera(56,1,.05,520);
@@ -87,7 +172,6 @@
     const gasMat=new THREE.MeshStandardMaterial({ color:0xce8b52, roughness:.32, emissive:0x1f0c03, emissiveIntensity:.08 });
     const starMat=new THREE.MeshBasicMaterial({ color:0xfff2be });
     const giantMat=new THREE.MeshBasicMaterial({ color:0xff6638 });
-    const blackMat=new THREE.MeshBasicMaterial({ color:0x000000 });
     const mk=function(){ const g=new THREE.Group(); g.visible=false; return g; };
     let g,m;
     g=mk(); m=new THREE.Mesh(new THREE.DodecahedronGeometry(1,0),roughRock); m.scale.set(1.06,.92,.98); g.add(m); this.stageRoot.add(g); this.stageModels[0]=g;
@@ -102,10 +186,7 @@
     this.stageRoot.add(g); this.stageModels[3]=g;
     g=mk(); m=new THREE.Mesh(new THREE.SphereGeometry(1,42,22),starMat); g.add(m); g.add(new THREE.Mesh(new THREE.SphereGeometry(1.32,32,16),glowMat(0xffd66b,.38))); g.add(new THREE.Mesh(new THREE.SphereGeometry(1.7,24,12),glowMat(0xff9b3d,.16))); g.userData.pulse=true; this.stageRoot.add(g); this.stageModels[4]=g;
     g=mk(); m=new THREE.Mesh(new THREE.SphereGeometry(1,42,22),giantMat); g.add(m); g.add(new THREE.Mesh(new THREE.SphereGeometry(1.2,32,16),glowMat(0xff5a28,.42))); g.add(new THREE.Mesh(new THREE.SphereGeometry(1.72,24,12),glowMat(0xff2b12,.20))); g.userData.pulse=true; this.stageRoot.add(g); this.stageModels[5]=g;
-    g=mk(); m=new THREE.Mesh(new THREE.SphereGeometry(1,42,22),blackMat); g.add(m);
-    const bhGlow=new THREE.Mesh(new THREE.SphereGeometry(1.12,32,16),glowMat(0x8fdcff,.22)); g.add(bhGlow);
-    const disk=new THREE.Mesh(new THREE.TorusGeometry(1.65,.095,16,160),glowMat(0xff9d2f,.82)); disk.rotation.x=Math.PI*.64; disk.rotation.z=.28; disk.userData.disk=true; g.add(disk);
-    const disk2=new THREE.Mesh(new THREE.TorusGeometry(2.05,.035,10,160),glowMat(0xffdf83,.45)); disk2.rotation.x=Math.PI*.64; disk2.rotation.z=.28; disk2.userData.disk=true; g.add(disk2);
+    g=mk(); m=new THREE.Mesh(new THREE.PlaneGeometry(4.8,4.8),blackHoleMaterial()); m.userData.blackHoleBillboard=true; g.add(m);
     this.stageRoot.add(g); this.stageModels[6]=g;
   };
   HoshikuiRenderer.prototype.applyStageMaterial=function(stage){
@@ -189,13 +270,20 @@
     this.stageRoot.traverse(o=>{
       if(o.userData.cloud) o.rotation.z+=.006;
       if(o.userData.gas) o.rotation.z+=.004;
-      if(o.userData.disk) o.rotation.z+=.035;
+      if(o.userData.blackHoleBillboard && o.material.uniforms) o.material.uniforms.time.value=this.clock;
     });
     const active=this.stageModels[p.stage]; if(active&&active.userData.pulse) active.scale.setScalar(1+.035*Math.sin(this.clock*6));
     this.gravityRing.position.set(p.x,-.02,p.z); this.gravityRing.scale.setScalar(game.gravityRadius); this.gravityRing.material.opacity=p.stage>=6?.34:.13;
     const dist=16+r*6+(p.stage>=4?10:0), height=10+r*2.4, yaw=game.cameraYaw, shake=(Math.random()-.5)*this.shake;
     const target=new THREE.Vector3(p.x,0,p.z), cam=new THREE.Vector3(p.x+Math.sin(yaw)*dist+shake,height+Math.abs(shake)*2,p.z+Math.cos(yaw)*dist+shake);
     this.camera.position.lerp(cam,.12); this.camera.lookAt(target);
+    if(p.stage>=6){
+      const activeBh=this.stageModels[6], q=new THREE.Quaternion(), inv=new THREE.Quaternion();
+      this.playerGroup.getWorldQuaternion(inv).invert();
+      q.copy(this.camera.quaternion).premultiply(inv);
+      activeBh.quaternion.copy(q);
+      activeBh.traverse(o=>{ if(o.userData.blackHoleBillboard && o.material.uniforms){ o.material.uniforms.time.value=this.clock; o.material.uniforms.massScale.value=Math.max(1,r*.25); } });
+    }
     this.renderer.render(this.scene,this.camera);
   };
   window.HoshikuiRenderer = HoshikuiRenderer;

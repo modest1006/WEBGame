@@ -95,6 +95,9 @@ games/<game-name>/
 - Pagesは全ファイル `max-age=600` でキャッシュされるため、**デプロイ直後は新旧ファイル混在が起きる**。JS/CSSを変更したら index.html のアセット参照のバージョンクエリ（`?v=N`）を必ず上げること
 - 「反映されない」報告はまずキャッシュを疑う（マーカー文字列を `Invoke-WebRequest` で確認する）
 
-## 起動登録
+## 起動登録・周辺更新
 
-新ゲーム追加時は `.claude/launch.json` に静的サーバー設定を追加する（Python の `http.server` に `--directory games/<name>` を渡す方式でよい。ポートはゲーム毎に変える）。
+新ゲーム追加時は以下も併せて更新する:
+- `.claude/launch.json` に静的サーバー設定を追加（Python の `http.server` に `--directory games/<name>`。ポートはゲーム毎に変える）
+- ルートの `index.html`（アーケードポータル）にカードを追加
+- **ルートの `README.md` のゲーム一覧に行を追加**（ジャンル・概要1行）
