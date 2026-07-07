@@ -16,6 +16,7 @@ Phase 2 実装です。4区間の路線を DEPART → CRUISE → APPROACH で走
 - 右端レバーをドラッグ: ノッチにスナップ
 - `Enter` / `Space`: タイトルから開始
 - `Space`: RUN_INTRO / DEPART / CRUISE をスキップして APPROACH へ
+- `H`: 警笛
 - `` ` ``: デバッグ表示
 
 ## 実装内容
@@ -24,6 +25,8 @@ Phase 2 実装です。4区間の路線を DEPART → CRUISE → APPROACH で走
 - `TITLE -> RUN_INTRO -> DEPART -> CRUISE -> APPROACH` の4区間ループ
 - CINE_SIDE / CINE_FRONT / CINE_AERIAL / CINE_TAIL のシネマティックカメラ
 - 田園、住宅地、山間、海沿い夕焼けの4テーマ
+- VVVF風加速音、ジョイント音、走行風、ブレーキ音、発車ベル、ドアチャイム、踏切、警笛
+- 横持ち推奨プロンプト、localStorageベストスコア保存
 - B1〜B8/EB、空気ブレーキ一次遅れ0.6秒、1箇所の上り勾配、停止ジャーク判定
 - 停止誤差・減点・操作回数ボーナスのスコアリング
 - 速度計、ブレーキレバー、残距離LED、FINAL大型カウンタ、停止時寸法線

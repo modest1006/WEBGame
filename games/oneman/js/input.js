@@ -15,6 +15,7 @@
       else if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') { self.touch(); self.game.adjustBrake(-1); e.preventDefault(); }
       else if (/^[1-9]$/.test(e.key)) { self.touch(); self.game.brake(Number(e.key)); e.preventDefault(); }
       else if (e.key.toLowerCase() === 'e') { self.touch(); self.game.brake(9); e.preventDefault(); }
+      else if (e.key.toLowerCase() === 'h') { self.touch(); if (self.hooks.horn) self.hooks.horn(); e.preventDefault(); }
       else if (e.key === 'Enter' || e.key === ' ') { self.touch(); if (self.hooks.start) self.hooks.start(); e.preventDefault(); }
       else if (e.key === '`' && self.hooks.debug) self.hooks.debug();
     });

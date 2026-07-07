@@ -27,6 +27,11 @@
   const renderer = new OneManRenderer($('view'), hud);
   const audio = new OneManAudio();
   const debug = installOneManDebug(game, renderer);
+  const rotatePrompt = $('rotate-prompt');
+  const hornBtn = $('horn-btn');
+  const portraitCoarse = matchMedia('(orientation: portrait) and (pointer: coarse)');
+  let rotatePaused = false;
+  let bestScore = Number(localStorage.getItem('oneman.best') || 0);
   window.__onemanRenderer = renderer;
   game.on(function (type, data) {
     try { renderer.handleEvent(type, data, game); audio.event(type, data || {}); }
@@ -39,30 +44,51 @@
   function syncShellState() {
     document.body.classList.toggle('title', game.phase === OneManGame.Phase.TITLE);
     document.body.classList.toggle('final-result', game.phase === OneManGame.Phase.FINAL_RESULT);
+    document.body.classList.toggle('departing', game.phase === OneManGame.Phase.DEPART);
+    if (game.phase === OneManGame.Phase.FINAL_RESULT) {
+      const total = game.resultSummary().total;
+      if (total > bestScore) {
+        bestScore = total;
+        localStorage.setItem('oneman.best', String(bestScore));
+      }
+    }
+    document.body.setAttribute('data-best', String(bestScore));
   }
-  new OneManInput(game, { anyInput: function () { audio.unlock(); }, start: startOrContinue, debug: debug.toggle }, $('brake-lever'));
+  function horn() { audio.unlock(); audio.event('horn', {}); }
+  function syncOrientationPrompt() {
+    const active = !!portraitCoarse.matches;
+    rotatePaused = active;
+    if (rotatePrompt) rotatePrompt.classList.toggle('hidden', !active);
+  }
+  new OneManInput(game, { anyInput: function () { audio.unlock(); }, start: startOrContinue, debug: debug.toggle, horn: horn }, $('brake-lever'));
   $('start-btn').addEventListener('click', function () { audio.unlock(); startOrContinue(); });
   $('mute-btn').addEventListener('click', function () { audio.unlock(); audio.toggleMute(); $('mute-btn').textContent = audio.muted ? 'MUTED' : 'SOUND'; });
-  window.addEventListener('resize', function () { try { renderer.resize(); } catch (err) { console.error('[resize]', err); } });
+  if (hornBtn) hornBtn.addEventListener('click', horn);
+  window.addEventListener('resize', function () { try { renderer.resize(); syncOrientationPrompt(); } catch (err) { console.error('[resize]', err); } });
+  if (portraitCoarse.addEventListener) portraitCoarse.addEventListener('change', syncOrientationPrompt);
+  else if (portraitCoarse.addListener) portraitCoarse.addListener(syncOrientationPrompt);
+  syncOrientationPrompt();
   let last = performance.now();
   function frame(now) {
     try {
       const dt = Math.min(100, now - last);
       last = now;
-      game.update(dt);
-      renderer.render(game, dt);
-      debug.update();
+      if (!rotatePaused) game.update(dt);
       syncShellState();
+      renderer.render(game, dt);
+      audio.update(game.getState(), dt);
+      debug.update();
     } catch (err) { console.error('[frame]', err); }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
   window.__renderOnce = function (dt) {
     try {
-      game.update(dt || 16.7);
-      renderer.render(game, dt || 16.7);
-      debug.update();
+      if (!rotatePaused) game.update(dt || 16.7);
       syncShellState();
+      renderer.render(game, dt || 16.7);
+      audio.update(game.getState(), dt || 16.7);
+      debug.update();
       return $('view').toDataURL('image/png').length;
     } catch (err) { console.error('[renderOnce]', err); return -1; }
   };

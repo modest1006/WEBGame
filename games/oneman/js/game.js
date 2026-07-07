@@ -381,6 +381,7 @@
   OneManGame.prototype.getState = function () {
     return {
       phase: this.phase,
+      phaseTimeMs: this.phaseTimeMs,
       x: this.x,
       v: this.v,
       kmh: this.v * 3.6,

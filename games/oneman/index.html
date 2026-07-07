@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ワンマン運転士 ONE-MAN DRIVER</title>
-  <link rel="stylesheet" href="css/style.css?v=4">
+  <link rel="stylesheet" href="css/style.css?v=5">
 </head>
 <body class="title">
   <main id="shell">
@@ -58,18 +58,23 @@
       <span>EFF <b id="eff">0.00</b></span>
       <span>GRADE <b id="grade">0.0‰</b></span>
       <button id="mute-btn" type="button">SOUND</button>
+      <button id="horn-btn" type="button">HORN</button>
     </aside>
 
     <div id="transition" class="fade"></div>
+    <section id="rotate-prompt" class="hidden" aria-live="polite">
+      <div class="rotate-icon"><span></span></div>
+      <b>横持ちでプレイしてね</b>
+    </section>
     <pre id="debug-overlay" class="hidden"></pre>
   </main>
 
-  <script src="lib/three.min.js?v=4"></script>
-  <script src="js/game.js?v=4"></script>
-  <script src="js/renderer.js?v=4"></script>
-  <script src="js/input.js?v=4"></script>
-  <script src="js/audio.js?v=4"></script>
-  <script src="js/debug.js?v=4"></script>
-  <script src="js/main.js?v=4"></script>
+  <script src="lib/three.min.js?v=5"></script>
+  <script src="js/game.js?v=5"></script>
+  <script src="js/renderer.js?v=5"></script>
+  <script src="js/input.js?v=5"></script>
+  <script src="js/audio.js?v=5"></script>
+  <script src="js/debug.js?v=5"></script>
+  <script src="js/main.js?v=5"></script>
 </body>
 </html>

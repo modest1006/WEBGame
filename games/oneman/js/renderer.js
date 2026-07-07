@@ -326,13 +326,15 @@
   OneManRenderer.prototype.buildSea = function (length) {
     const seaMat = new THREE.MeshPhongMaterial({ color: 0x2b5f91, emissive: 0x15163f, shininess: 80, specular: 0xffb56b });
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(1200, length + 900), seaMat);
-    sea.rotation.x = -Math.PI / 2; sea.position.set(-390, 0.005, length / 2); this.world.add(sea);
+    sea.rotation.x = -Math.PI / 2; sea.position.set(390, 0.005, length / 2); this.world.add(sea);
     const reflect = new THREE.Mesh(new THREE.PlaneGeometry(54, length * 0.72), new THREE.MeshBasicMaterial({ color: 0xffa34c, transparent: true, opacity: 0.45, depthWrite: false }));
-    reflect.rotation.x = -Math.PI / 2; reflect.position.set(-245, 0.018, length * 0.55); this.world.add(reflect);
+    reflect.rotation.x = -Math.PI / 2; reflect.position.set(245, 0.018, length * 0.55); this.world.add(reflect);
     const wall = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.6, length + 250), mat(0xb6b1a0));
-    wall.position.set(-52, 0.8, length / 2); this.world.add(wall);
+    wall.position.set(52, 0.8, length / 2); this.world.add(wall);
+    const beach = new THREE.Mesh(new THREE.PlaneGeometry(180, length + 500), mat(0xd0b77d));
+    beach.rotation.x = -Math.PI / 2; beach.position.set(-125, 0.01, length / 2); this.world.add(beach);
     const sun = new THREE.Mesh(new THREE.CircleGeometry(36, 40), basic(0xffc15b));
-    sun.position.set(-430, 82, length * 0.66); this.world.add(sun);
+    sun.position.set(430, 82, length * 0.66); this.world.add(sun);
   };
 
   OneManRenderer.prototype.buildTrain = function () {
@@ -443,7 +445,7 @@
       this.camera.position.set(tail.x - 5, 4.4 + wob, tail.z - 42);
       this.camera.lookAt(new THREE.Vector3(p.x, 1.65, p.z + 20));
     } else {
-      const side = s.stationIndex === 3 ? -1 : 1;
+      const side = 1;
       this.camera.position.set(p.x + side * 20, 4.1 + wob, p.z - 16);
       this.camera.lookAt(new THREE.Vector3(p.x, 1.55, p.z + 7));
     }
@@ -467,8 +469,11 @@
     h.leverKnob.style.transform = 'translate(-50%, -50%) rotate(' + (s.notch - 4.5) * 2.2 + 'deg)';
     h.lever.querySelectorAll('.notch').forEach(function (n, i) { n.classList.toggle('active', i === s.notch); });
     h.dimension.classList.toggle('show', s.dimensionFlash > 0 || s.phase === 'STATION_RESULT');
+    h.dimension.classList.toggle('pitari', !!(s.result && Math.abs(s.result.errorM) <= 0.3));
     if (s.result) {
-      h.dimensionValue.textContent = (s.result.errorM >= 0 ? '+' : '-') + Math.round(Math.abs(s.result.errorM) * 100) + 'cm';
+      const cm = Math.round(Math.abs(s.result.errorM) * 100);
+      const countT = s.dimensionFlash > 0 ? Math.min(1, (1.6 - s.dimensionFlash) / 0.65) : 1;
+      h.dimensionValue.textContent = (s.result.errorM >= 0 ? '+' : '-') + Math.round(cm * countT) + 'cm';
       h.resultTitle.textContent = s.result.rank;
       h.resultBody.textContent = '誤差 ' + Math.round(s.result.errorM * 100) + 'cm / ' + s.result.score + '点';
     } else { h.dimensionValue.textContent = ''; h.resultTitle.textContent = ''; h.resultBody.textContent = ''; }
@@ -477,6 +482,8 @@
       h.resultBody.textContent = '総合 ' + s.finalResult.total + '点 / 4駅';
     }
     h.result.classList.toggle('show', s.phase === 'STATION_RESULT' || s.phase === 'FINAL_RESULT');
+    h.result.classList.toggle('pitari', !!(s.result && Math.abs(s.result.errorM) <= 0.3));
+    h.result.setAttribute('data-best', document.body.getAttribute('data-best') || '0');
     if (h.routeIntro) {
       h.routeIntro.classList.toggle('show', s.phase === 'RUN_INTRO');
       h.routeMap.textContent = ['田場川', '木漏台', '深山口', '海風浜', '終点'].map(function (name, i) { return (i === s.stationIndex ? '●' : '○') + name; }).join('  ');
