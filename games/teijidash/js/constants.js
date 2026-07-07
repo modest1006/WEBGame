@@ -1,4 +1,4 @@
-const VERSION = 2;
+const VERSION = 3;
 
 const WORLD = { w: 960, h: 540 };
 const ACT = {
@@ -10,6 +10,7 @@ const ACT = {
   DAY_RESULT: 5,
   WEEK_RESULT: 6,
   INTERLUDE: 7,
+  FINALE: 8,
 };
 const ACT_NAMES = {
   0: 'TITLE',
@@ -20,6 +21,7 @@ const ACT_NAMES = {
   5: '日次リザルト',
   6: '週間リザルト',
   7: '幕間',
+  8: '退社の瞬間',
 };
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI'];
 const DAY_JP = ['月', '火', '水', '木', '金'];
@@ -47,6 +49,10 @@ const TUNING = {
   justFlashMs: 100,
   dashMs: 40000,
   resultInputLockMs: 1000,
+  finaleMs: 3200,
+  finaleFreezeStartMs: 1450,
+  finaleFreezeMs: 520,
+  finaleDoorX: 4920,
   prepRate: 100 / 27000,
   prepPenalty: 6,
   caughtPenaltyMs: 1800,

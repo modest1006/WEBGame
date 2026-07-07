@@ -28,7 +28,8 @@ function installDebug(game) {
     setPrep: (pct) => game.setPrep(pct),
     bossLook: (on) => game.bossLook(on),
     spawnQTE: (type) => game.spawnQTE(type),
-    finishDay: () => { game.finishDay(); return game.result(); },
+    finale: () => { game.enterFinale(); return game.getState(); },
+    finishDay: () => { game.finishDay(true); return game.result(); },
     result: () => game.result(),
   };
 
@@ -48,6 +49,7 @@ function installDebug(game) {
         `prep=${s.prep}% stage=${s.prepStage} boss=${s.bossLooking} warn=${s.bossWarnMs}`,
         `clock=${s.clockMs} judge=${s.judge} offset=${s.offset}`,
         `score=${s.score} combo=${s.combo}/${s.maxCombo} run=${s.runX} speed=${s.speed}`,
+        `finale=${s.finaleMs || 0} grade=${s.finaleGrade || '-'}`,
         `qte=${s.qte.map((q) => q.type + ':' + q.dist + '/' + q.taps).join(',')}`,
       ].join('\n');
     },

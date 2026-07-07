@@ -50,6 +50,8 @@ class TeijiDashGame {
     this.qtes = [];
     this.nextQteX = 700;
     this.directorSpawned = false;
+    this.finaleStarted = false;
+    this.finaleGrade = 'normal';
     this.flashText = '';
     this.flashMs = 0;
     this.dayResult = null;
@@ -112,6 +114,7 @@ class TeijiDashGame {
     else if (this.act === ACT.JUST) this.tickJust(dt);
     else if (this.act === ACT.JUST_SLOW) this.tickJustSlow(dt);
     else if (this.act === ACT.DASH) this.tickDash(dt);
+    else if (this.act === ACT.FINALE) this.tickFinale(dt);
     else if (this.act === ACT.DAY_RESULT) this.resultLines = clamp(Math.floor((this.time - 900) / 420), 0, 4);
   }
 
@@ -235,9 +238,33 @@ class TeijiDashGame {
     }
     // Keep failed QTEs while their bind animation is active; dropping them early skips slowdown feedback.
     this.qtes = this.qtes.filter((q) => q.failedBind > 0 || (!q.done && q.age < 3600));
-    if (this.runX > this.nextQteX && this.runX < 4300) this.spawnQTE();
-    const goal = this.day === 4 ? 5200 : 4700;
-    if (this.runX >= goal || this.time >= TUNING.dashMs) this.finishDay();
+    const qteStop = this.day === 4 ? 4100 : 3700;
+    if (this.runX > this.nextQteX && this.runX < qteStop) this.spawnQTE();
+    if (this.day === 4 && this.runX > 3920 && !this.directorSpawned) this.spawnQTE('director');
+    const finaleStart = this.day === 4 ? 4920 : 4520;
+    if (this.runX >= finaleStart || this.time >= TUNING.dashMs) this.enterFinale();
+  }
+
+  enterFinale() {
+    if (this.act === ACT.FINALE || this.act === ACT.DAY_RESULT || this.act === ACT.WEEK_RESULT) return;
+    this.act = ACT.FINALE;
+    this.time = 0;
+    this.inputDown = false;
+    this.qtes = [];
+    this.finaleStarted = true;
+    this.finaleGrade = this.hits === 0 ? 'perfect' : 'messy';
+    this.speed = Math.max(this.speed, 820 + this.maxCombo * 24 + (this.day === 4 ? 120 : 0));
+    this.say(this.finaleGrade === 'perfect' ? '完全退社!!' : '退社!!', 2200);
+    this.emit('finale', { grade: this.finaleGrade, friday: this.day === 4, combo: this.maxCombo, hits: this.hits, judge: this.justJudge });
+  }
+
+  tickFinale(dt) {
+    const t = clamp(this.time / TUNING.finaleMs, 0, 1);
+    const sprint = this.time < TUNING.finaleFreezeStartMs;
+    if (sprint) this.speed = lerp(this.speed, 1180 + this.maxCombo * 34 + (this.day === 4 ? 180 : 0), 0.025);
+    else this.speed = lerp(this.speed, 360, 0.03);
+    this.runX += this.speed * dt / 1000 * (this.time < TUNING.finaleFreezeStartMs ? 1 : 0.38);
+    if (t >= 1) this.finishDay(true);
   }
 
   spawnQTE(type) {
@@ -310,7 +337,7 @@ class TeijiDashGame {
   press(down) {
     if (down === false) return this.release();
     if (this.act === ACT.TITLE || this.act === ACT.WEEK_RESULT) { this.start(); return; }
-    if (this.act === ACT.INTERLUDE || this.act === ACT.JUST_SLOW) return;
+    if (this.act === ACT.INTERLUDE || this.act === ACT.JUST_SLOW || this.act === ACT.FINALE) return;
     if (this.act === ACT.DAY_RESULT) {
       if (this.time < TUNING.resultInputLockMs) return;
       this.nextDay();
@@ -338,7 +365,8 @@ class TeijiDashGame {
     else if (n === 2) this.enterJust();
     else if (n === 3) this.enterDash();
     else if (n === 4) this.act = ACT.JUST_SLOW;
-    else this.act = clamp(Math.floor(n), 0, 7);
+    else if (n === 8) this.enterFinale();
+    else this.act = clamp(Math.floor(n), 0, 8);
     return this.act;
   }
 
@@ -346,8 +374,9 @@ class TeijiDashGame {
   setPrep(pct) { this.prep = clamp(Number(pct) || 0, 0, 100); this.prepStage = clamp(Math.floor(this.prep / 25), 0, 3); return this.prep; }
   bossLook(on) { this.bossForced = !!on; this.bossLooking = !!on; this.emit('bossLook', { on: this.bossLooking }); return this.bossLooking; }
 
-  finishDay() {
+  finishDay(fromFinale) {
     if (this.act === ACT.DAY_RESULT || this.act === ACT.WEEK_RESULT) return;
+    if (!fromFinale && this.act === ACT.DASH) { this.enterFinale(); return; }
     const precision = this.justJudge === 'PERFECT' ? 1.25 : this.justJudge === 'GREAT' ? 1.05 : this.justJudge === 'GOOD' ? 0.82 : 0.55;
     const latePenalty = this.justOffset > 0 ? Math.min(0.35, this.justOffset / 3000) : 0;
     const prepMul = 0.55 + this.prep / 100 * 0.75;
@@ -405,6 +434,8 @@ class TeijiDashGame {
       bossWarnMs: Math.round(this.bossWarn),
       clockMs: Math.round(this.justClockMs),
       slowMs: this.act === ACT.JUST_SLOW ? Math.round(this.time) : 0,
+      finaleMs: this.act === ACT.FINALE ? Math.round(this.time) : 0,
+      finaleGrade: this.finaleGrade,
       slowTotalMs: this.justSlow,
       score: this.weekScore + (this.act === ACT.DAY_RESULT || this.act === ACT.WEEK_RESULT ? 0 : this.dayScore),
       dayScore: this.dayScore,

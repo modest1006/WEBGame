@@ -25,10 +25,11 @@ function syncHud() {
   $('best').textContent = Math.floor(game.best).toLocaleString('en-US');
   $('prep-bar').style.width = s.prep + '%';
   if (game.act === ACT.DASH) $('meter-label').textContent = `疾走 ${s.runX}m / Combo ${s.combo} / ${s.judge || '-'}`;
+  else if (game.act === ACT.FINALE) $('meter-label').textContent = s.finaleGrade === 'perfect' ? '完全退社フィナーレ' : '退社フィナーレ';
   else if (game.act === ACT.JUST || game.act === ACT.JUST_SLOW) $('meter-label').textContent = `打刻 ${s.stamp || fmtMs(Math.max(0, -s.clockMs))}`;
   else if (game.act === ACT.DAY_RESULT) $('meter-label').textContent = s.resultLocked ? 'タイムカード打刻中...' : '押すと次へ';
   else $('meter-label').textContent = `帰り支度 ${s.prep}%`;
-  judgeEl.textContent = game.flashMs > 0 && game.act !== ACT.DAY_RESULT && game.act !== ACT.INTERLUDE && game.act !== ACT.JUST_SLOW ? game.flashText : '';
+  judgeEl.textContent = game.flashMs > 0 && game.act !== ACT.DAY_RESULT && game.act !== ACT.INTERLUDE && game.act !== ACT.JUST_SLOW && game.act !== ACT.FINALE ? game.flashText : '';
 }
 
 function syncOverlay() {

@@ -63,6 +63,12 @@ class Music {
       this.tone(f * 1.5, 0.12, 'triangle', 0.05, this.now() + 0.05);
     }
     if (type === 'qteFail') { this.tone(160, 0.22, 'sawtooth', 0.1); this.tone(90, 0.28, 'square', 0.08, this.now() + 0.12); }
+    if (type === 'finale') {
+      this.noise(0.18, 0.18);
+      this.tone(110, 0.22, 'sawtooth', 0.18);
+      const t = this.now() + 1.95;
+      [523, 659, 784, 1046].forEach((f, i) => this.tone(f, 0.18, 'triangle', 0.08, t + i * 0.12));
+    }
   }
 
   update(game) {
@@ -76,9 +82,10 @@ class Music {
     } else if (game.act === ACT.JUST) {
       this.tone(880, 0.035, 'square', 0.035);
       this.loop = now + 1;
-    } else if (game.act === ACT.DASH) {
+    } else if (game.act === ACT.DASH || game.act === ACT.FINALE) {
       [220, 330, 440, 660].forEach((f, i) => this.tone(f, 0.06, 'sawtooth', 0.025, now + i * 0.085));
-      this.loop = now + 0.34;
+      if (game.act === ACT.FINALE) this.tone(880, 0.08, 'triangle', 0.035, now + 0.22);
+      this.loop = game.act === ACT.FINALE ? now + 0.24 : now + 0.34;
     } else {
       this.loop = now + 0.5;
     }

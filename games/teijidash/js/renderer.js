@@ -51,6 +51,7 @@ class Renderer {
   drawScene(c, game) {
     this.drawSky(c, game);
     if (game.act === ACT.DASH) this.drawDash(c, game);
+    else if (game.act === ACT.FINALE) this.drawFinale(c, game);
     else if (game.act === ACT.DAY_RESULT) this.drawDayResult(c, game);
     else if (game.act === ACT.WEEK_RESULT) this.drawWeekResult(c, game);
     else this.drawOffice(c, game);
@@ -59,7 +60,7 @@ class Renderer {
   }
 
   drawSky(c, game) {
-    const dash = game.act === ACT.DASH || game.act === ACT.DAY_RESULT || game.act === ACT.WEEK_RESULT;
+    const dash = game.act === ACT.DASH || game.act === ACT.FINALE || game.act === ACT.DAY_RESULT || game.act === ACT.WEEK_RESULT;
     const g = c.createLinearGradient(0, 0, 0, WORLD.h);
     g.addColorStop(0, dash ? '#ff9c65' : '#526f8c');
     g.addColorStop(0.58, dash ? '#ffd184' : '#e3a35b');
@@ -342,6 +343,7 @@ class Renderer {
       c.fillRect(wx + 24, 145, 42, 62);
       c.fillRect(wx + 94, 145, 42, 62);
     }
+    this.drawEntrance(c, TUNING.finaleDoorX - cam, 0, game, 0);
     this.drawRunner(c, 260, 332, game, false);
     for (const q of game.qtes) this.drawObstacle(c, q.x - cam, 318, q, game);
     this.drawDashJudgeHud(c, game);
@@ -352,6 +354,152 @@ class Renderer {
       c.font = '900 28px Arial';
       c.fillText('EXIT', 790 - (game.runX - 4550) * 0.12, 110);
     }
+  }
+
+  drawFinale(c, game) {
+    const t = clamp(game.time / TUNING.finaleMs, 0, 1);
+    const freezeStart = TUNING.finaleFreezeStartMs / TUNING.finaleMs;
+    const freezeEnd = (TUNING.finaleFreezeStartMs + TUNING.finaleFreezeMs) / TUNING.finaleMs;
+    const cam = lerp(game.runX - 300, TUNING.finaleDoorX - 470, easeOut(clamp(t * 1.6, 0, 1)));
+    c.fillStyle = '#4f5962';
+    c.fillRect(0, 368, WORLD.w, 96);
+    for (let x = -((cam * 0.8) % 105); x < WORLD.w; x += 105) {
+      c.fillStyle = '#fff8df';
+      c.fillRect(x, 406, 44, 6);
+    }
+    for (let i = 0; i < 34; i++) {
+      const wx = i * 220 - cam;
+      const zone = i < 24 ? '#657887' : '#ffb15f';
+      c.fillStyle = zone;
+      c.fillRect(wx, 110, 180, 240);
+      c.fillStyle = '#fff0b8';
+      c.fillRect(wx + 24, 145, 42, 62);
+      c.fillRect(wx + 94, 145, 42, 62);
+    }
+    const doorX = TUNING.finaleDoorX - cam;
+    this.drawEntrance(c, doorX, 0, game, t);
+    this.drawFinaleLight(c, game, t);
+    const runner = this.finaleRunnerPose(t, game);
+    for (let i = 1; i <= 7; i++) {
+      c.globalAlpha = (game.finaleGrade === 'perfect' ? 0.16 : 0.1) * (1 - i / 8);
+      this.drawRunner(c, runner.x - i * (24 + t * 12), runner.y + i * 2, game, true);
+    }
+    c.globalAlpha = 1;
+    if (t >= freezeStart && t <= freezeEnd) this.drawFinaleSilhouette(c, runner.x, runner.y, game);
+    else if (t > freezeEnd) this.drawFinaleLanding(c, runner.x, runner.y, game, t);
+    else this.drawRunner(c, runner.x, runner.y, game, false);
+    this.drawFinaleConfetti(c, game, t);
+    if (t >= freezeStart && t <= freezeEnd + 0.12) this.drawFinaleCalligraphy(c, game);
+    this.drawDashJudgeHud(c, game);
+  }
+
+  finaleRunnerPose(t, game) {
+    const freezeStart = TUNING.finaleFreezeStartMs / TUNING.finaleMs;
+    const freezeEnd = (TUNING.finaleFreezeStartMs + TUNING.finaleFreezeMs) / TUNING.finaleMs;
+    if (t < freezeStart) return { x: lerp(210, 478, easeOut(t / freezeStart)), y: lerp(332, 250, easeOut(t / freezeStart)) };
+    if (t < freezeEnd) return { x: 512, y: 214 };
+    const landT = clamp((t - freezeEnd) / (1 - freezeEnd), 0, 1);
+    return { x: lerp(512, 600, easeOut(landT)), y: lerp(214, game.hits ? 338 : 324, easeOut(landT)) };
+  }
+
+  drawEntrance(c, x, y, game, finaleT) {
+    if (x < -260 || x > WORLD.w + 260) return;
+    c.fillStyle = '#303a45';
+    c.fillRect(x - 150, y + 88, 300, 280);
+    c.fillStyle = '#fff8df';
+    c.fillRect(x - 128, y + 104, 256, 54);
+    c.fillStyle = '#2b2220';
+    c.font = '900 26px Arial';
+    c.textAlign = 'center';
+    c.fillText(game.day === 4 ? '定時商事 本社' : '夕焼け商事', x, y + 140);
+    const open = clamp((finaleT - 0.18) / 0.22, 0, 1);
+    c.fillStyle = 'rgba(170,230,255,0.62)';
+    c.fillRect(x - 106, y + 170, 212, 196);
+    c.fillStyle = '#bfeaff';
+    c.fillRect(x - 106, y + 170, 106 * (1 - open), 196);
+    c.fillRect(x + 106 - 106 * (1 - open), y + 170, 106 * (1 - open), 196);
+    c.strokeStyle = '#ffffff';
+    c.lineWidth = 5;
+    c.strokeRect(x - 106, y + 170, 212, 196);
+    if (finaleT > 0.28 && finaleT < 0.56) {
+      c.strokeStyle = '#fff';
+      c.lineWidth = 6;
+      for (let i = 0; i < 8; i++) {
+        c.beginPath();
+        c.moveTo(x, y + 258);
+        c.lineTo(x + Math.cos(i) * 170, y + 258 + Math.sin(i) * 130);
+        c.stroke();
+      }
+    }
+  }
+
+  drawFinaleLight(c, game, t) {
+    c.globalAlpha = 0.28 + t * 0.44;
+    c.fillStyle = '#ffd16d';
+    c.fillRect(0, 0, WORLD.w, WORLD.h);
+    c.globalAlpha = game.finaleGrade === 'perfect' ? 0.36 : 0.2;
+    const colors = game.day === 4 || game.finaleGrade === 'perfect' ? ['#ff4d4d', '#ffe05d', '#58d68d', '#76d4ff', '#c77dff'] : ['#fff2a1'];
+    for (let i = 0; i < 10; i++) {
+      c.fillStyle = colors[i % colors.length];
+      c.beginPath();
+      c.moveTo(742, 54);
+      c.lineTo(i * 110 - 120, 540);
+      c.lineTo(i * 110 - 52, 540);
+      c.fill();
+    }
+    c.globalAlpha = 1;
+  }
+
+  drawFinaleSilhouette(c, x, y, game) {
+    c.save();
+    c.translate(x, y);
+    c.fillStyle = '#101010';
+    c.fillRect(-16, 42, 14, 52);
+    c.fillRect(18, 42, 14, 52);
+    c.fillRect(-32, -12, 66, 62);
+    c.fillRect(-74, -30, 54, 14);
+    c.fillRect(24, -46, 58, 14);
+    c.fillRect(-22, -62, 46, 46);
+    c.restore();
+  }
+
+  drawFinaleLanding(c, x, y, game, t) {
+    const wobble = game.hits ? Math.sin(t * 44) * 7 : 0;
+    this.drawHuman(c, x + wobble, y, { suit: game.hits ? '#2f75bd' : '#d44335', hair: '#35251f', pose: 'work', t: game.time });
+    c.fillStyle = '#fff8df';
+    c.fillRect(x - 76 + wobble, y - 8, 48, 12);
+    c.fillRect(x + 32 + wobble, y - 8, 48, 12);
+    if (game.hits) {
+      c.fillStyle = '#66d7ff';
+      c.fillRect(x + 46 + wobble, y - 54, 12, 18);
+    }
+  }
+
+  drawFinaleConfetti(c, game, t) {
+    const count = (game.day === 4 ? 70 : 42) + (game.finaleGrade === 'perfect' ? 28 : 0);
+    const colors = ['#fff8df', '#ffe05d', '#ff7b7b', '#76d4ff', '#91ffb0'];
+    for (let i = 0; i < count; i++) {
+      const px = (i * 83 + t * 520 * (1 + (i % 5) * 0.1)) % WORLD.w;
+      const py = (80 + i * 29 + t * 420) % 420;
+      c.save();
+      c.translate(px, py);
+      c.rotate(i + t * 8);
+      c.fillStyle = colors[i % colors.length];
+      c.fillRect(-8, -4, 16, 8);
+      c.restore();
+    }
+  }
+
+  drawFinaleCalligraphy(c, game) {
+    c.fillStyle = '#fff';
+    c.strokeStyle = '#2b2220';
+    c.lineWidth = 10;
+    c.font = '900 82px Arial';
+    c.textAlign = 'center';
+    const text = game.finaleGrade === 'perfect' ? '完全退社!!' : '退社!!';
+    c.strokeText(text, 480, 134);
+    c.fillText(text, 480, 134);
+    c.textAlign = 'left';
   }
 
   drawRunner(c, x, y, game, slow) {
