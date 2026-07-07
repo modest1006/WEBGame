@@ -8,6 +8,7 @@ class NeonDriveRenderer {
     this.frame = 0;
     this.events = [];
     this.particles = [];
+    this.boostFlash = 0;
     this.resize();
   }
 
@@ -27,7 +28,10 @@ class NeonDriveRenderer {
       for (let i = 0; i < 18; i++) this.particles.push({ x: this.w * 0.5 + data.side * this.w * 0.16, y: this.h * 0.75, vx: data.side * (70 + Math.random() * 220), vy: -90 - Math.random() * 220, life: 0.35 + Math.random() * 0.35, color: '#67f8ff' });
     }
     if (type === 'checkpoint') this.events.push({ type, text: `CHECKPOINT +${data.bonus}s`, x: this.w * 0.5, y: this.h * 0.28, life: 1.4, max: 1.4 });
-    if (type === 'boost') this.events.push({ type, text: 'BOOST', x: this.w * 0.5, y: this.h * 0.62, life: 0.85, max: 0.85 });
+    if (type === 'boost') {
+      this.boostFlash = 0.15;
+      this.events.push({ type, text: 'BOOST', x: this.w * 0.5, y: this.h * 0.62, life: 0.85, max: 0.85 });
+    }
     if (type === 'crash') {
       this.events.push({ type, text: 'CRASH -4.5s', x: this.w * 0.5, y: this.h * 0.42, life: 1.1, max: 1.1 });
       for (let i = 0; i < 38; i++) this.particles.push({ x: this.w * 0.5, y: this.h * 0.76, vx: -240 + Math.random() * 480, vy: -260 + Math.random() * 170, life: 0.4 + Math.random() * 0.6, color: Math.random() < 0.5 ? '#ff3bd7' : '#ffd45f' });
@@ -61,10 +65,11 @@ class NeonDriveRenderer {
     const road = this.drawRoad(ctx, game, speedT, boost);
     this.drawTraffic(ctx, game, road, boost);
     this.drawSpeedLines(ctx, speedT, boost);
-    this.drawPlayer(ctx, game, boost);
+    this.drawPlayer(ctx, game, road, boost);
     this.drawParticles(ctx, dt);
     this.drawPopups(ctx, dt);
     if (boost) this.drawChromatic(ctx);
+    this.drawBoostFlash(ctx, dt);
     if (game.slowmo > 0) this.drawCrashVignette(ctx, game.slowmo);
     ctx.restore();
   }
@@ -158,7 +163,7 @@ class NeonDriveRenderer {
       const q1 = p1.y > this.h ? Object.assign({}, p1, { y: this.h }) : p1;
       const q2 = p2.y > this.h ? Object.assign({}, p2, { y: this.h }) : p2;
       if (q1.y < 0 && q2.y < 0) continue;
-      const band = Math.floor((baseIndex + n) / ND.road.rumbleLength) % 2;
+      const band = Math.floor((baseIndex + n) * (boost ? 1.85 : 1) / ND.road.rumbleLength) % 2;
       const roadColor = band ? '#21142f' : '#2d1840';
       const shoulder = band ? '#ff2bd1' : '#62f6ff';
       this.poly(ctx, q1.x - q1.w * 1.28, q1.y, q1.x - q1.w, q1.y, q2.x - q2.w, q2.y, q2.x - q2.w * 1.28, q2.y, shoulder);
@@ -208,6 +213,15 @@ class NeonDriveRenderer {
     const scale = p2.scale * this.w;
     if (scale < 1 || y > this.h + 20) return;
     ctx.save();
+    if (boost) {
+      ctx.globalAlpha = 0.16;
+      ctx.translate(x, y + scale * 0.1);
+      ctx.scale(1, 1.25);
+      ctx.fillStyle = '#66f7ff';
+      ctx.fillRect(-scale * 0.035, -scale * 0.22, scale * 0.07, scale * 0.24);
+      ctx.restore();
+      ctx.save();
+    }
     ctx.translate(x, y);
     ctx.globalAlpha = ndClamp(p2.scale * 44, 0.12, 0.95);
     ctx.shadowBlur = boost ? 18 : 10;
@@ -238,12 +252,27 @@ class NeonDriveRenderer {
       if (!p) continue;
       const x = p.x + car.x * p.w;
       const y = p.y;
-      const w = Math.max(5, p.w * 0.28);
+      const w = Math.max(7, p.w * 0.48);
       const h = w * 0.52;
+      const lateral = Math.abs(car.x - game.playerX);
+      const warning = dz < 25 && lateral < 0.46;
       ctx.save();
       ctx.globalAlpha = ndClamp(1.3 - dz / 700, 0.25, 1);
       ctx.shadowColor = colors[car.color] || '#fff';
-      ctx.shadowBlur = boost ? 18 : 10;
+      ctx.shadowBlur = warning ? 28 + Math.sin(this.frame * 28) * 10 : car.near ? 24 : boost ? 18 : 10;
+      if (warning) {
+        ctx.fillStyle = 'rgba(255,32,72,.28)';
+        ctx.beginPath();
+        ctx.ellipse(x, y - h * 0.25, w * 0.9, h * 0.75, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (car.near) {
+        ctx.strokeStyle = 'rgba(255,238,92,.85)';
+        ctx.lineWidth = Math.max(2, w * 0.045);
+        ctx.beginPath();
+        ctx.ellipse(x, y - h * 0.18, w * 0.68, h * 0.58, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       if (game.speed > 100 && dz < 80) {
         ctx.fillStyle = 'rgba(255,255,255,.12)';
         ctx.fillRect(x - w * 0.35, y - h * 0.45, w * 0.7, h * 2.8);
@@ -268,22 +297,29 @@ class NeonDriveRenderer {
     if (speedT < 0.38) return;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const count = Math.floor(18 + speedT * 44 + boost * 28);
+    const count = Math.floor(18 + speedT * 44 + boost * 90);
     for (let i = 0; i < count; i++) {
       const side = i % 2 ? -1 : 1;
       const x = side < 0 ? Math.random() * this.w * 0.23 : this.w - Math.random() * this.w * 0.23;
       const y = Math.random() * this.h;
-      const len = (70 + Math.random() * 220) * speedT;
-      ctx.strokeStyle = i % 3 === 0 ? 'rgba(255,52,210,.34)' : 'rgba(93,246,255,.32)';
-      ctx.lineWidth = 1 + Math.random() * 2;
+      const len = (70 + Math.random() * 220) * speedT * (boost ? 2.1 : 1);
+      ctx.strokeStyle = i % 3 === 0 ? `rgba(255,52,210,${boost ? .62 : .34})` : `rgba(93,246,255,${boost ? .58 : .32})`;
+      ctx.lineWidth = (1 + Math.random() * 2) * (boost ? 1.45 : 1);
       ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - side * len, y + len * 0.12); ctx.stroke();
     }
     ctx.restore();
   }
 
-  drawPlayer(ctx, game, boost) {
-    const x = this.w * 0.5 + game.playerX * this.w * 0.19;
-    const y = this.h * 0.84;
+  drawPlayer(ctx, game, road, boost) {
+    const targetY = this.h * 0.84;
+    let row = road && road[1];
+    if (road && road.length) {
+      for (const p of road) {
+        if (!row || Math.abs(p.y - targetY) < Math.abs(row.y - targetY)) row = p;
+      }
+    }
+    const x = row ? row.x + game.playerX * row.w : this.w * 0.5 + game.playerX * this.w * 0.19;
+    const y = row ? ndClamp(row.y, this.h * 0.72, this.h * 0.9) : targetY;
     const steerLean = game.steerInput * 0.12 - game.getSegmentAt(game.distance).curve * 48;
     const w = Math.min(this.w, this.h) * 0.19;
     const h = w * 0.48;
@@ -294,9 +330,9 @@ class NeonDriveRenderer {
     ctx.shadowColor = '#66f7ff';
     if (boost) {
       ctx.fillStyle = 'rgba(93,246,255,.42)';
-      ctx.beginPath(); ctx.moveTo(-w * 0.24, h * 0.38); ctx.lineTo(0, h * 1.05 + Math.random() * 28); ctx.lineTo(w * 0.24, h * 0.38); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-w * 0.34, h * 0.38); ctx.lineTo(0, h * 1.6 + Math.random() * 46); ctx.lineTo(w * 0.34, h * 0.38); ctx.fill();
       ctx.fillStyle = 'rgba(255,57,211,.38)';
-      ctx.beginPath(); ctx.moveTo(-w * 0.1, h * 0.35); ctx.lineTo(0, h * 0.86 + Math.random() * 18); ctx.lineTo(w * 0.1, h * 0.35); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-w * 0.16, h * 0.35); ctx.lineTo(0, h * 1.18 + Math.random() * 28); ctx.lineTo(w * 0.16, h * 0.35); ctx.fill();
     }
     ctx.fillStyle = '#111126';
     ctx.beginPath();
@@ -348,11 +384,25 @@ class NeonDriveRenderer {
   drawChromatic(ctx) {
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
+    const pulse = 1 + Math.sin(this.frame * 34) * 0.35;
     ctx.strokeStyle = 'rgba(255,50,210,.32)';
-    ctx.lineWidth = 5;
-    ctx.strokeRect(8, 5, this.w - 16, this.h - 10);
+    ctx.lineWidth = 5 * pulse;
+    ctx.strokeRect(8 - pulse * 2, 5, this.w - 16 + pulse * 4, this.h - 10);
     ctx.strokeStyle = 'rgba(93,246,255,.28)';
-    ctx.strokeRect(18, 12, this.w - 36, this.h - 24);
+    ctx.strokeRect(18 + pulse * 2, 12, this.w - 36 - pulse * 4, this.h - 24);
+    ctx.restore();
+  }
+
+  drawBoostFlash(ctx, dt) {
+    if (this.boostFlash <= 0) return;
+    this.boostFlash = Math.max(0, this.boostFlash - dt);
+    const t = this.boostFlash / 0.15;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.fillStyle = `rgba(220,255,255,${0.55 * t})`;
+    ctx.fillRect(0, 0, this.w, this.h);
+    ctx.fillStyle = `rgba(83,244,255,${0.35 * (1 - t)})`;
+    ctx.fillRect(0, 0, this.w, this.h);
     ctx.restore();
   }
 

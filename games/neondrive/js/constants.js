@@ -21,7 +21,7 @@ const ND = {
     brake: 42,
     drag: 0.015,
     maxSpeed: 132,
-    boostMaxSpeed: 178,
+    boostMaxSpeed: 192,
     offroadSlow: 55,
     offroadMinSpeed: 14,  // オフロードでもこの速度までしか減速しない（スタック防止）
     steerSpeed: 2.35,
@@ -34,9 +34,9 @@ const ND = {
     checkpointBonus: 26,
     checkpointBonusMin: 14,
     nearMissDistance: 7.2,
-    nearMissLateral: 0.38,
+    nearMissLateral: 0.60,
     crashRadiusZ: 2.2,
-    crashLateral: 0.46,
+    crashLateral: 0.36,
   },
   lanes: [-0.66, 0, 0.66],
 };

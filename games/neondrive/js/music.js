@@ -143,12 +143,27 @@ class NeonDriveMusic {
     } else if (type === 'checkpoint') {
       [523, 659, 784, 1046].forEach((f, i) => this.tone(f, t + i * 0.07, 0.16, 'square', 0.06, this.master));
     } else if (type === 'boost') {
-      this.noise(t, 0.48, 0.2, 1200);
-      this.tone(130, t, 0.45, 'sawtooth', 0.12, this.master);
+      this.noise(t, 0.58, 0.34, 900);
+      this.sweep(t, 0.42, 120, 1800, 0.16);
+      this.tone(130, t, 0.55, 'sawtooth', 0.16, this.master);
     } else if (type === 'countdown') {
       this.tone(980, t, 0.08, 'square', 0.08, this.master);
     } else if (type === 'dead') {
       [330, 247, 196, 147].forEach((f, i) => this.tone(f, t + i * 0.12, 0.24, 'triangle', 0.08, this.master));
     }
+  }
+
+  sweep(time, dur, from, to, gain) {
+    if (!this.ctx) return;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(from, time);
+    o.frequency.exponentialRampToValueAtTime(to, time + dur);
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.exponentialRampToValueAtTime(gain, time + 0.025);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(time); o.stop(time + dur + 0.02);
   }
 }

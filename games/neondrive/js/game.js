@@ -131,19 +131,25 @@ class NeonDriveGame {
 
   seedTraffic() {
     this.cars.length = 0;
-    for (let i = 0; i < 13; i++) this.spawnTraffic(80 + i * 75 + this.runRng.range(0, 45));
+    for (let i = 0; i < 11; i++) this.spawnTraffic(120 + i * 125 + this.runRng.range(0, 80));
   }
 
   spawnTraffic(distAhead, lane) {
     const palette = ['cyan', 'magenta', 'yellow', 'blue', 'white'];
+    let ahead = Number(distAhead) || 260;
+    for (let tries = 0; tries < 8; tries++) {
+      const crowded = this.cars.filter((c) => Math.abs((c.z - this.distance) - ahead) < 30).length;
+      if (crowded < 2) break;
+      ahead = this.runRng.range(260, 1600);
+    }
     const laneIndex = lane == null ? this.runRng.int(0, 2) : ndClamp(Math.floor(lane), 0, 2);
     const car = {
       id: this.nextCarId++,
-      z: this.distance + distAhead,
+      z: this.distance + ahead,
       lane: laneIndex,
       x: ND.lanes[laneIndex],
       speed: this.runRng.range(54, 105),
-      dir: this.runRng.next() < 0.17 ? -1 : 1,
+      dir: this.runRng.next() < 0.10 ? -1 : 1,
       color: this.runRng.pick(palette),
       near: false,
       wobble: this.runRng.range(-0.04, 0.04),
@@ -179,7 +185,9 @@ class NeonDriveGame {
     if (this.boostQueued && this.boost >= 0.32 && this.state === 'playing') {
       this.boostQueued = false;
       this.boostTime = Math.min(4.1, 1.35 + this.boost * 2.4);
+      this.speed = Math.min(ND.physics.boostMaxSpeed, this.speed + 25);
       this.boost = Math.max(0, this.boost - 0.32);
+      this.shake = Math.max(this.shake, 1.1);
       this.emit('boost', { power: this.boostTime });
     } else {
       this.boostQueued = false;
@@ -199,7 +207,8 @@ class NeonDriveGame {
     this.speed += accel * dt;
     this.speed -= this.speed * ND.physics.drag * dt;
     if (boostOn) this.speed += 30 * dt;
-    this.speed = ndClamp(this.speed, 0, maxSpeed);
+    if (!boostOn && this.speed > maxSpeed) this.speed -= (this.speed - maxSpeed) * dt * 1.65;
+    this.speed = ndClamp(this.speed, 0, boostOn ? maxSpeed : Math.max(maxSpeed, this.speed));
     this.distance += this.speed * dt * (this.slowmo > 0 ? 0.55 : 1);
 
     const curveForce = seg.curve * this.speed * ND.physics.centrifugal;
@@ -226,7 +235,7 @@ class NeonDriveGame {
       const lateral = Math.abs(car.x - this.playerX);
       if (this.state === 'playing' && dz > -0.4 && dz < ND.rules.crashRadiusZ && lateral < ND.rules.crashLateral) {
         this.crash(car);
-      } else if (this.state === 'playing' && !car.near && dz > -1.2 && dz < ND.rules.nearMissDistance && lateral < ND.rules.nearMissLateral && lateral > 0.18) {
+      } else if (this.state === 'playing' && !car.near && dz > -1.2 && dz < ND.rules.nearMissDistance && lateral < ND.rules.nearMissLateral && lateral > ND.rules.crashLateral) {
         car.near = true;
         const bonus = Math.floor(450 + this.speed * 14 + this.combo * 120);
         this.score += bonus;
@@ -238,7 +247,7 @@ class NeonDriveGame {
       }
     }
     this.cars = this.cars.filter((c) => c.z > this.distance - 80 && c.z < this.distance + 1800);
-    while (this.cars.length < 18) this.spawnTraffic(this.runRng.range(220, 1450));
+    while (this.cars.length < 11) this.spawnTraffic(this.runRng.range(260, 1600));
   }
 
   updateRules(dt) {
