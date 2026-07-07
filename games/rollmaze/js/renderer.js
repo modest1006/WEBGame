@@ -12,11 +12,16 @@
     return t;
   }
 
+  function noFog(mat) {
+    mat.fog = false;
+    return mat;
+  }
+
   function RollMazeRenderer(canvas) {
     this.canvas = canvas;
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0x91a8d3, 16, 42);
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 80);
+    this.scene.fog = new THREE.Fog(0x91a8d3, 36, 76);
+    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 160);
     this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, preserveDrawingBuffer: true });
     this.renderer.setClearColor(0x18274f, 1);
     this.renderer.shadowMap.enabled = true;
@@ -28,6 +33,8 @@
     this.stageId = 0;
     this.meshes = {};
     this.clock = 0;
+    this.cameraDistance = 0;
+    this.cameraTarget = new THREE.Vector3();
     this.woodTex = makeCanvasTexture(function (g) {
       g.fillStyle = '#9b6133';
       g.fillRect(0, 0, 256, 256);
@@ -56,6 +63,7 @@
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.cameraDistance = 0;
   };
 
   RollMazeRenderer.prototype.buildLights = function () {
@@ -107,11 +115,12 @@
   RollMazeRenderer.prototype.buildStage = function (game) {
     const s = game.stage;
     this.stageId = s.def.id;
+    this.cameraDistance = 0;
     this.clearBoard();
     this.buildSky(s.def.sky);
-    const tileMat = new THREE.MeshStandardMaterial({ map: this.woodTex, color: 0xb8783d, roughness: 0.46, metalness: 0.03 });
-    const wallMat = new THREE.MeshStandardMaterial({ map: this.woodTex, color: 0xd09957, roughness: 0.42 });
-    const voidMat = new THREE.MeshStandardMaterial({ color: 0x5d371d, roughness: 0.5 });
+    const tileMat = noFog(new THREE.MeshStandardMaterial({ map: this.woodTex, color: 0xb8783d, roughness: 0.46, metalness: 0.03 }));
+    const wallMat = noFog(new THREE.MeshStandardMaterial({ map: this.woodTex, color: 0xd09957, roughness: 0.42 }));
+    const voidMat = noFog(new THREE.MeshStandardMaterial({ color: 0x5d371d, roughness: 0.5 }));
     const tileGeo = new THREE.BoxGeometry(0.98, 0.16, 0.98);
     const wallGeo = new THREE.BoxGeometry(1, 0.62, 1);
     for (let z = 0; z < s.h; z++) {
@@ -124,7 +133,7 @@
           const tile = new THREE.Mesh(tileGeo, tileMat);
           tile.receiveShadow = true;
           tile.position.set(wx, -0.08, wz);
-          if (ch === 'I') tile.material = new THREE.MeshStandardMaterial({ color: 0x9bd8e7, roughness: 0.08, metalness: 0.18, transparent: true, opacity: 0.88 });
+          if (ch === 'I') tile.material = noFog(new THREE.MeshStandardMaterial({ color: 0x9bd8e7, roughness: 0.08, metalness: 0.18, transparent: true, opacity: 0.88 }));
           this.boardGroup.add(tile);
         } else {
           const wall = new THREE.Mesh(wallGeo, wallMat);
@@ -145,9 +154,12 @@
     this.boardGroup.add(side, side.clone());
     this.boardGroup.children[this.boardGroup.children.length - 1].position.x = s.w / 2 + 0.1;
     this.addMarkers(game);
-    this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.22, 32, 18), new THREE.MeshStandardMaterial({ color: 0xf7f6ef, roughness: 0.18, metalness: 0.55, envMapIntensity: 0.7 }));
+    this.ball = new THREE.Mesh(new THREE.SphereGeometry(0.28, 32, 18), noFog(new THREE.MeshStandardMaterial({ color: 0x36d8ff, emissive: 0x0a6f9a, emissiveIntensity: 0.25, roughness: 0.16, metalness: 0.5, envMapIntensity: 0.7 })));
     this.ball.castShadow = true;
     this.boardGroup.add(this.ball);
+    this.ballRing = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.012, 8, 42), noFog(new THREE.MeshBasicMaterial({ color: 0x8ff6ff, transparent: true, opacity: 0.5, depthWrite: false })));
+    this.ballRing.rotation.x = Math.PI / 2;
+    this.boardGroup.add(this.ballRing);
     this.trailGeo = new THREE.BufferGeometry();
     this.trailLine = new THREE.Line(this.trailGeo, new THREE.LineBasicMaterial({ color: 0xdff7ff, transparent: true, opacity: 0.45 }));
     this.boardGroup.add(this.trailLine);
@@ -176,14 +188,14 @@
 
   RollMazeRenderer.prototype.addMarkers = function (game) {
     const s = game.stage;
-    const holeMat = new THREE.MeshBasicMaterial({ color: 0x030306 });
+    const holeMat = noFog(new THREE.MeshBasicMaterial({ color: 0x030306 }));
     for (let i = 0; i < s.holes.length; i++) {
       const h = s.holes[i];
       const m = new THREE.Mesh(new THREE.CylinderGeometry(h.r, h.r * 0.72, 0.025, 38), holeMat);
       m.position.set(h.x, 0.015, h.z);
       this.boardGroup.add(m);
       this.meshes.holes.push(m);
-      const rim = new THREE.Mesh(new THREE.TorusGeometry(h.r, 0.035, 8, 36), new THREE.MeshStandardMaterial({ color: 0x3b2415, roughness: 0.35 }));
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(h.r, 0.035, 8, 36), noFog(new THREE.MeshStandardMaterial({ color: 0x3b2415, roughness: 0.35 })));
       rim.rotation.x = Math.PI / 2;
       rim.position.set(h.x, 0.035, h.z);
       this.boardGroup.add(rim);
@@ -191,32 +203,35 @@
     for (let p = 0; p < s.pads.length; p++) {
       const pad = s.pads[p];
       const key = pad.dx > 0 ? '>' : pad.dx < 0 ? '<' : pad.dz < 0 ? '^' : 'v';
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.82), new THREE.MeshBasicMaterial({ map: this.arrowTexture(key), transparent: true, depthWrite: false }));
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.82, 0.82), noFog(new THREE.MeshBasicMaterial({ map: this.arrowTexture(key), transparent: true, depthWrite: false })));
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(pad.x, 0.035, pad.z);
       this.boardGroup.add(mesh);
       this.meshes.pads.push(mesh);
     }
-    const goal = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.08, 36), new THREE.MeshStandardMaterial({ color: 0x55ffd4, emissive: 0x2fd6a8, emissiveIntensity: 0.65 }));
+    const goal = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.08, 36), noFog(new THREE.MeshStandardMaterial({ color: 0x55ffd4, emissive: 0x36ffd3, emissiveIntensity: 1.45 })));
     goal.position.set(s.goal.x, 0.06, s.goal.z);
     this.boardGroup.add(goal);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.75, 8), new THREE.MeshStandardMaterial({ color: 0xf4e7c1 }));
+    const goalGlow = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.025, 40), noFog(new THREE.MeshBasicMaterial({ color: 0x7dffdf, transparent: true, opacity: 0.28, depthWrite: false })));
+    goalGlow.position.set(s.goal.x, 0.08, s.goal.z);
+    this.boardGroup.add(goalGlow);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.75, 8), noFog(new THREE.MeshStandardMaterial({ color: 0xf4e7c1 })));
     pole.position.set(s.goal.x + 0.22, 0.42, s.goal.z);
     this.boardGroup.add(pole);
-    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.26), new THREE.MeshBasicMaterial({ color: 0xffdf5d, side: THREE.DoubleSide }));
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.26), noFog(new THREE.MeshBasicMaterial({ color: 0xffdf5d, side: THREE.DoubleSide })));
     flag.position.set(s.goal.x + 0.45, 0.62, s.goal.z);
     this.boardGroup.add(flag);
     this.meshes.goal = goal;
     for (let c = 0; c < s.checkpoints.length; c++) {
       const cp = s.checkpoints[c];
-      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.035, 24), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x498cff, emissiveIntensity: 0.35 }));
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.035, 24), noFog(new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x498cff, emissiveIntensity: 0.35 })));
       base.position.set(cp.x, 0.04, cp.z);
       this.boardGroup.add(base);
       this.meshes.checkpoints.push(base);
     }
     for (let b = 0; b < s.bars.length; b++) {
       const bar = s.bars[b];
-      const bm = new THREE.Mesh(new THREE.BoxGeometry(bar.len, 0.22, bar.thick), new THREE.MeshStandardMaterial({ color: 0x8a4a2d, roughness: 0.35 }));
+      const bm = new THREE.Mesh(new THREE.BoxGeometry(bar.len, 0.22, bar.thick), noFog(new THREE.MeshStandardMaterial({ color: 0x8a4a2d, roughness: 0.35 })));
       bm.position.set(bar.x, 0.24, bar.z);
       bm.castShadow = true;
       this.boardGroup.add(bm);
@@ -262,6 +277,55 @@
     }
   };
 
+  RollMazeRenderer.prototype.getBoardFitCorners = function (stage) {
+    const pad = 0.45;
+    const xs = [-stage.w / 2 - pad, stage.w / 2 + pad];
+    const zs = [-stage.h / 2 - pad, stage.h / 2 + pad];
+    const ys = [-0.22, 1.1];
+    const out = [];
+    for (let xi = 0; xi < xs.length; xi++) {
+      for (let yi = 0; yi < ys.length; yi++) {
+        for (let zi = 0; zi < zs.length; zi++) {
+          out.push(this.boardGroup.localToWorld(new THREE.Vector3(xs[xi], ys[yi], zs[zi])));
+        }
+      }
+    }
+    return out;
+  };
+
+  RollMazeRenderer.prototype.fitCameraDistance = function (stage, targetWorld, cameraDir) {
+    const forward = cameraDir.clone().multiplyScalar(-1).normalize();
+    const worldUp = new THREE.Vector3(0, 1, 0);
+    let right = new THREE.Vector3().crossVectors(forward, worldUp);
+    if (right.lengthSq() < 0.0001) right = new THREE.Vector3(1, 0, 0);
+    right.normalize();
+    const up = new THREE.Vector3().crossVectors(right, forward).normalize();
+    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov * 0.5));
+    const tanH = tanV * this.camera.aspect;
+    const corners = this.getBoardFitCorners(stage);
+    let halfW = 0;
+    let halfH = 0;
+    for (let i = 0; i < corners.length; i++) {
+      const o = corners[i].clone().sub(targetWorld);
+      halfW = Math.max(halfW, Math.abs(o.dot(right)));
+      halfH = Math.max(halfH, Math.abs(o.dot(up)));
+    }
+    const fill = 1.12; // 平面近似では奥行き分の目減りがあるため実測合わせで強め（0.88だと実占有67%だった）
+    const byWidth = halfW / (tanH * fill);
+    const byHeight = halfH / (tanV * fill);
+    return Math.max(Math.max(byWidth, byHeight) + 0.35, 6);
+  };
+
+  RollMazeRenderer.prototype.getCameraTargetLocal = function (st) {
+    const boardW = st.board.w;
+    const boardH = st.board.h;
+    const maxX = boardW * 0.5 * 0.13;
+    const maxZ = boardH * 0.5 * 0.13;
+    const x = THREE.MathUtils.clamp(st.ball.x * 0.12, -maxX, maxX);
+    const z = THREE.MathUtils.clamp(st.ball.z * 0.12, -maxZ, maxZ);
+    return new THREE.Vector3(x, 0.12, z);
+  };
+
   RollMazeRenderer.prototype.render = function (game, dt) {
     if (this.stageId !== game.stage.def.id) this.buildStage(game);
     this.clock += (dt || 16.7) / 1000;
@@ -271,6 +335,10 @@
     this.ball.position.set(st.ball.x, st.ball.y, st.ball.z);
     this.ball.rotation.x = st.ball.spinX;
     this.ball.rotation.z = st.ball.spinZ;
+    if (this.ballRing) {
+      this.ballRing.position.set(st.ball.x, 0.035, st.ball.z);
+      this.ballRing.scale.setScalar(1 + Math.sin(this.clock * 8) * 0.08);
+    }
     this.trail.push([st.ball.x, Math.max(0.04, st.ball.y - 0.16), st.ball.z]);
     if (this.trail.length > 42) this.trail.shift();
     const pts = [];
@@ -282,14 +350,21 @@
       this.meshes.bars[b].rotation.y = game.timeMs / 1000 * bar.speed + bar.phase;
     }
     this.updateEffects(dt || 16.7);
-    const boardW = st.board.w, boardH = st.board.h;
-    const target = new THREE.Vector3(st.ball.x * 0.35, 0, st.ball.z * 0.35);
-    const orbit = st.mode === 'goal' ? this.clock * 1.4 : -0.52;
-    const dist = Math.max(boardW, boardH) * 0.62 + 3.7;
-    const cam = new THREE.Vector3(Math.sin(orbit) * dist, dist * 0.74, Math.cos(orbit) * dist);
-    cam.add(target);
-    this.camera.position.lerp(cam, 0.08);
-    this.camera.lookAt(target.x, 0, target.z);
+    const orbit = st.mode === 'goal' ? this.clock * 1.4 : -0.14;
+    const cameraDir = new THREE.Vector3(Math.sin(orbit), 0.72, Math.cos(orbit)).normalize();
+    const targetLocal = this.getCameraTargetLocal(st);
+    const targetWorld = this.boardGroup.localToWorld(targetLocal.clone());
+    const fitDist = this.fitCameraDistance(game.stage, targetWorld, cameraDir);
+    const distLerp = this.cameraDistance > 0 ? 0.1 : 1;
+    this.cameraDistance = THREE.MathUtils.lerp(this.cameraDistance || fitDist, fitDist, distLerp);
+    const cam = targetWorld.clone().add(cameraDir.multiplyScalar(this.cameraDistance));
+    this.cameraTarget.lerp(targetWorld, this.cameraTarget.lengthSq() > 0 ? 0.12 : 1);
+    this.camera.position.lerp(cam, 0.12);
+    this.camera.lookAt(this.cameraTarget);
+    if (this.scene.fog) {
+      this.scene.fog.near = this.cameraDistance + 8;
+      this.scene.fog.far = this.cameraDistance + 42;
+    }
     if (this.stars) this.stars.rotation.y += 0.00004 * (dt || 16.7);
     this.renderer.render(this.scene, this.camera);
   };
