@@ -215,15 +215,17 @@
       if (this.canSee(e.x, e.z, this.player.x, this.player.z) || d < 5) e.awake = true;
       if (!e.awake || e.pain > 0) continue;
       const vx = (this.player.x - e.x) / Math.max(0.001, d), vz = (this.player.z - e.z) / Math.max(0.001, d);
-      if (e.type === 'imp' && d < def.range && e.cooldown <= 0 && this.canSee(e.x, e.z, this.player.x, this.player.z)) {
+      const los = this.canSee(e.x, e.z, this.player.x, this.player.z);
+      if (e.type === 'imp' && d < def.range && e.cooldown <= 0 && los) {
         this.projectiles.push({ x: e.x, z: e.z, vx: vx * 3.0, vz: vz * 3.0, damage: def.damage, life: 2800 });
         e.cooldown = def.attackMs;
         this.emit('cast', { x: e.x, z: e.z });
-      } else if (d < def.range && e.cooldown <= 0) {
+      } else if (e.type !== 'imp' && d < def.range && e.cooldown <= 0 && los) {
+        // 近接は視線必須。impはrangeが火球用(7.2m)なのでこの分岐に入れると壁越し攻撃になる
         this.hurt(def.damage);
         e.cooldown = def.attackMs;
         this.emit('claw', { x: e.x, z: e.z });
-      } else if (d > def.range * 0.85) {
+      } else if (d > def.range * 0.85 || !los) {
         const sp = def.speed * (e.type === 'brute' && d < 4 ? 1.75 : 1);
         e.x += vx * sp * dt; this.moveCircle(e, 0, 0);
         e.z += vz * sp * dt; this.moveCircle(e, 0, 0);
