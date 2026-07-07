@@ -13,6 +13,7 @@
     this.camera = new THREE.PerspectiveCamera(68, 400 / 250, 0.05, 40);
     this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: false, preserveDrawingBuffer: true });
     this.renderer.setClearColor(0x1d0608, 1);
+    this.horizontalFov = 82;
     this.lowW = 400; this.lowH = 250;
     this.levelId = 0; this.meshes = {}; this.sprites = {};
     this.clock = 0; this.drawCalls = 0;
@@ -21,12 +22,23 @@
   }
   HellbreakRenderer.prototype.resize = function () {
     const coarse = matchMedia('(pointer: coarse)').matches;
-    this.lowW = coarse ? 320 : 400; this.lowH = coarse ? 200 : 250;
+    const cssW = Math.max(1, this.canvas.clientWidth || innerWidth || 400);
+    const cssH = Math.max(1, this.canvas.clientHeight || innerHeight || 250);
+    const aspect = cssW / cssH;
+    const baseW = coarse ? 320 : 400;
+    this.lowW = baseW;
+    this.lowH = Math.max(120, Math.round(baseW / aspect));
+    if (this.lowH > (coarse ? 720 : 560)) {
+      this.lowH = coarse ? 720 : 560;
+      this.lowW = Math.max(220, Math.round(this.lowH * aspect));
+    }
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(this.lowW, this.lowH, false);
     this.canvas.style.width = '100%'; this.canvas.style.height = '100%';
     this.weaponCanvas.width = this.lowW; this.weaponCanvas.height = this.lowH;
-    this.camera.aspect = this.lowW / this.lowH; this.camera.updateProjectionMatrix();
+    this.camera.aspect = aspect;
+    this.camera.fov = 2 * Math.atan(Math.tan((this.horizontalFov * Math.PI / 180) / 2) / aspect) * 180 / Math.PI;
+    this.camera.updateProjectionMatrix();
   };
   HellbreakRenderer.prototype.makeTextures = function () {
     this.wallTex = {

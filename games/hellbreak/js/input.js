@@ -19,7 +19,7 @@
       self.actions.anyInput();
     } catch (err) { console.error('[keydown]', err); } });
     window.addEventListener('keyup', function (e) { try { self.keys[e.key.toLowerCase()] = false; } catch (err) { console.error('[keyup]', err); } });
-    window.addEventListener('mousemove', function (e) { try { if (document.pointerLockElement === self.canvas) self.game.setTurn(e.movementX); } catch (err) { console.error('[mousemove]', err); } });
+    window.addEventListener('mousemove', function (e) { try { if (document.pointerLockElement === self.canvas) self.game.setTurn(-e.movementX); } catch (err) { console.error('[mousemove]', err); } });
     this.canvas.addEventListener('click', function () { try { self.actions.anyInput(); self.game.start(); if (self.canvas.requestPointerLock) self.canvas.requestPointerLock(); self.game.setFire(true); setTimeout(function(){ self.game.setFire(false); }, 40); } catch (err) { console.error('[click]', err); } });
     window.addEventListener('mousedown', function (e) { try { if (e.button === 0) { self.actions.anyInput(); self.game.start(); self.game.setFire(true); } } catch (err) { console.error('[mousedown]', err); } });
     window.addEventListener('mouseup', function () { try { self.game.setFire(false); } catch (err) { console.error('[mouseup]', err); } });
@@ -34,7 +34,7 @@
     function endMove(e) { if (self.touchMove && self.touchMove.id === e.pointerId) { self.touchMove = null; self.stick.style.transform = ''; } }
     stickBox.addEventListener('pointerup', endMove); stickBox.addEventListener('pointercancel', endMove);
     window.addEventListener('pointerdown', function (e) { try { if (e.clientX > innerWidth * .42 && e.target === self.canvas) { self.touchLook = { id: e.pointerId, x: e.clientX }; self.canvas.setPointerCapture(e.pointerId); } } catch (err) { console.error('[lookdown]', err); } });
-    window.addEventListener('pointermove', function (e) { try { if (!self.touchLook || self.touchLook.id !== e.pointerId) return; self.game.setTurn((e.clientX - self.touchLook.x) * 1.7); self.touchLook.x = e.clientX; } catch (err) { console.error('[lookmove]', err); } });
+    window.addEventListener('pointermove', function (e) { try { if (!self.touchLook || self.touchLook.id !== e.pointerId) return; self.game.setTurn((self.touchLook.x - e.clientX) * 1.7); self.touchLook.x = e.clientX; } catch (err) { console.error('[lookmove]', err); } });
     window.addEventListener('pointerup', function (e) { if (self.touchLook && self.touchLook.id === e.pointerId) self.touchLook = null; });
     fire.addEventListener('pointerdown', function (e) { e.preventDefault(); self.actions.anyInput(); self.game.start(); self.game.setFire(true); });
     fire.addEventListener('pointerup', function () { self.game.setFire(false); }); fire.addEventListener('pointercancel', function () { self.game.setFire(false); });

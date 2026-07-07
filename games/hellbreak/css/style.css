@@ -26,6 +26,13 @@ button:active { transform: translateY(1px); }
 #debug-overlay { position: absolute; left: 8px; top: 54px; z-index: 9; margin: 0; padding: 8px; max-width: 48vw; max-height: 56vh; overflow: hidden; color: #9aff9a; background: rgba(0,0,0,.72); font: 12px/1.25 Consolas, monospace; white-space: pre-wrap; }
 .hidden { display: none; }
 #touch-ui { display: none; }
+#rotate-prompt { position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; align-content: center; gap: 18px; background: rgba(8, 1, 2, .9); color: #ffd6a4; text-align: center; font-family: Arial, sans-serif; font-weight: 900; letter-spacing: 0; }
+#rotate-prompt.hidden { display: none; }
+#rotate-prompt b { font-size: clamp(24px, 7vw, 48px); text-shadow: 3px 3px #000; }
+.rotate-icon { width: 112px; height: 72px; border: 6px solid #ff4a2d; border-radius: 12px; position: relative; box-shadow: 0 0 0 5px #2b0b09 inset; transform: rotate(90deg); }
+.rotate-icon::before { content: ""; position: absolute; left: -28px; top: 20px; width: 18px; height: 18px; border-left: 7px solid #ffd64b; border-bottom: 7px solid #ffd64b; transform: rotate(45deg); }
+.rotate-icon::after { content: ""; position: absolute; right: -28px; top: 20px; width: 18px; height: 18px; border-right: 7px solid #ffd64b; border-top: 7px solid #ffd64b; transform: rotate(45deg); }
+.rotate-icon span { position: absolute; left: 46px; top: 26px; width: 18px; height: 18px; background: #ffd64b; border-radius: 50%; }
 @media (pointer: coarse) {
   #hud { height: 86px; grid-template-columns: 1fr 1fr 92px 1fr 68px; padding: 8px; }
   .hud-block b { font-size: 34px; }
@@ -37,6 +44,12 @@ button:active { transform: translateY(1px); }
   #use-touch { position: absolute; right: 134px; bottom: 130px; width: 70px; height: 70px; border-radius: 50%; pointer-events: auto; }
   #weapon-touch { position: absolute; right: 18px; bottom: 230px; display: flex; gap: 8px; pointer-events: auto; }
   #weapon-touch button { width: 42px; height: 42px; padding: 0; }
+}
+@media (orientation: landscape) and (pointer: coarse) {
+  #stick { left: max(18px, env(safe-area-inset-left)); bottom: max(104px, calc(env(safe-area-inset-bottom) + 102px)); }
+  #fire-touch { right: max(18px, env(safe-area-inset-right)); bottom: max(104px, calc(env(safe-area-inset-bottom) + 102px)); }
+  #use-touch { right: max(130px, calc(env(safe-area-inset-right) + 130px)); bottom: max(116px, calc(env(safe-area-inset-bottom) + 116px)); }
+  #weapon-touch { right: max(18px, env(safe-area-inset-right)); bottom: max(214px, calc(env(safe-area-inset-bottom) + 214px)); }
 }
 @media (max-width: 560px) {
   #topbar b { font-size: 20px; }

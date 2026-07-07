@@ -5,13 +5,18 @@
   const $ = function (id) { return document.getElementById(id); };
   const game = new HellbreakGame({ seed: seed });
   const renderer = new HellbreakRenderer($('view'), $('weapon-view'), $('face'));
+  window.__hellbreakRenderer = renderer;
   const audio = new HellbreakAudio();
   const debug = installHellbreakDebug(game, renderer);
+  const rotatePrompt = $('rotate-prompt');
+  const portraitCoarse = matchMedia('(orientation: portrait) and (pointer: coarse)');
+  let rotatePromptActive = false;
+  let rotatePausedGame = false;
   const input = new HellbreakInput(game, {
     anyInput: function () { audio.unlock(); },
     restart: function () { audio.unlock(); game.restart(); syncOverlay(); },
     mute: function () { audio.unlock(); audio.toggleMute(); syncHud(); },
-    pause: function () { if (game.mode !== 'title') game.paused = !game.paused; syncOverlay(); },
+    pause: function () { if (game.mode !== 'title' && !rotatePromptActive) game.paused = !game.paused; syncOverlay(); },
     debug: function () { debug.toggle(); }
   }, $('view'));
 
@@ -57,6 +62,21 @@
       o.classList.remove('hidden'); title.textContent = 'PAUSED'; copy.textContent = 'Esc resumes.'; result.textContent = ''; btn.textContent = 'RESUME';
     } else o.classList.add('hidden');
   }
+  function syncOrientationPrompt() {
+    const active = !!portraitCoarse.matches;
+    rotatePromptActive = active;
+    if (rotatePrompt) rotatePrompt.classList.toggle('hidden', !active);
+    if (active) {
+      if (!game.paused) {
+        game.paused = true;
+        rotatePausedGame = true;
+      }
+    } else if (rotatePausedGame) {
+      game.paused = false;
+      rotatePausedGame = false;
+    }
+    syncOverlay();
+  }
   function validationLine(v) { return 'Path validation: ' + v.map(function (x) { return 'L' + x.level + ' ' + (x.ok ? 'OK' : 'FAIL'); }).join(' / '); }
   $('play-btn').addEventListener('click', function () {
     try {
@@ -65,14 +85,16 @@
       else if (game.mode === 'dead') game.restart();
       else if (game.mode === 'result') game.nextLevel();
       else if (game.mode === 'ending') game.setLevel(1);
-      else game.paused = false;
+      else if (!rotatePromptActive) game.paused = false;
       syncOverlay();
     } catch (err) { console.error('[play]', err); }
   });
   $('mute-btn').addEventListener('click', function () { audio.unlock(); audio.toggleMute(); syncHud(); });
-  window.addEventListener('resize', function () { try { renderer.resize(); } catch (err) { console.error('[resize]', err); } });
+  window.addEventListener('resize', function () { try { renderer.resize(); syncOrientationPrompt(); } catch (err) { console.error('[resize]', err); } });
+  if (portraitCoarse.addEventListener) portraitCoarse.addEventListener('change', syncOrientationPrompt);
+  else if (portraitCoarse.addListener) portraitCoarse.addListener(syncOrientationPrompt);
 
-  syncHud(); syncOverlay();
+  syncHud(); syncOverlay(); syncOrientationPrompt();
   let last = performance.now();
   function frame(now) {
     try {

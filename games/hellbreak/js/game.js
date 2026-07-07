@@ -98,8 +98,8 @@
   HellbreakGame.prototype.movePlayer = function (dt) {
     const p = this.player;
     const cy = Math.cos(p.yaw), sy = Math.sin(p.yaw);
-    let ax = sy * this.input.mz + cy * this.input.mx;
-    let az = cy * this.input.mz - sy * this.input.mx;
+    let ax = sy * this.input.mz - cy * this.input.mx;
+    let az = cy * this.input.mz + sy * this.input.mx;
     const l = len(ax, az);
     if (l > 1) { ax /= l; az /= l; }
     p.vx += ax * C.MOVE_SPEED * C.FRICTION * dt;
