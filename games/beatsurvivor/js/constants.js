@@ -8,6 +8,8 @@ const OVERDRIVE_BPM_PER_MIN = 4;
 const BPM_MAX = 160;
 const ENDLESS_BOSS_INTERVAL = 180;     // ENDLESS: 3:00豈弱↓繝懊せ
 const ENDLESS_BEST_KEY = 'beatsurvivor.endless.bestTime.v1';
+const SAVE_KEY = 'beatsurvivor.save.v1';
+const LEGACY_NORMAL_BEST_KEY = 'beatsurvivor.bestTime.v1';
 const PERFECT_MS = 80;                 // ビート±この範囲のダッシュでPERFECT
 const GOOD_MS = 150;                   // GOOD（GROOVE維持）
 const GROOVE_STEP = 0.15;              // GROOVE 1につき火力+15%
@@ -49,6 +51,13 @@ const ENEMIES = {
   boss:   { r: 46, speed: 58, hp: 3200, hpGrow: 0, dmg: 30, xp: 60, color: '#ffd23e' },
 };
 const ENEMY_CAP = 220;
+const ENEMY_GRID_CELL = 96;
+const TIER_HITSTOP_SEC = 0.09;
+const BOSS_DEFEAT_STOP_SEC = 1.2;
+const DEATH_SLOW_SEC = 1.2;
+const DEATH_FADE_SEC = 0.8;
+const DEATH_SLOW_SCALE = 0.35;
+const TIER_COLORS = ['#3be8f0', '#7cff9e', '#ffd23e', '#ff8c42', '#f04dd8'];
 
 // ===== 武器（すべてビートに同期して発動） =====
 // everyBeats: 発動間隔（ビート数）。0.5 = 8分音符
@@ -123,4 +132,61 @@ function beatAtTime(mode, t) {
   const rampDur = rampEnd - OVERDRIVE_TIME;
   const rampBeats = (BPM * rampDur + (OVERDRIVE_BPM_PER_MIN / 120) * rampDur * rampDur) / 60;
   return OVERDRIVE_TIME * (BPM / 60) + rampBeats + (t - rampEnd) * (BPM_MAX / 60);
+}
+
+
+function defaultBeatSurvivorSave() {
+  return {
+    version: 1,
+    best: { normalTime: 0, endlessTime: 0 },
+    settings: { screenShake: true, reducedFlash: false },
+  };
+}
+
+function normalizeBeatSurvivorSave(data) {
+  const base = defaultBeatSurvivorSave();
+  if (!data || data.version !== 1) return base;
+  return {
+    version: 1,
+    best: {
+      normalTime: Number(data.best?.normalTime) || 0,
+      endlessTime: Number(data.best?.endlessTime) || 0,
+    },
+    settings: {
+      screenShake: data.settings?.screenShake !== false,
+      reducedFlash: data.settings?.reducedFlash === true,
+    },
+  };
+}
+
+function loadBeatSurvivorSave() {
+  const save = defaultBeatSurvivorSave();
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) return normalizeBeatSurvivorSave(JSON.parse(raw));
+    const legacyEndless = Number(localStorage.getItem(ENDLESS_BEST_KEY) || 0);
+    const legacyNormal = Number(localStorage.getItem(LEGACY_NORMAL_BEST_KEY) || 0);
+    if (legacyEndless > 0 || legacyNormal > 0) {
+      save.best.endlessTime = legacyEndless || 0;
+      save.best.normalTime = legacyNormal || 0;
+      saveBeatSurvivorSave(save);
+    }
+  } catch (err) {
+    console.warn('[beatsurvivor] save data reset:', err);
+    try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
+  }
+  return save;
+}
+
+function saveBeatSurvivorSave(next) {
+  const data = normalizeBeatSurvivorSave(next);
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); }
+  catch (err) { console.warn('[beatsurvivor] save failed:', err); }
+  return data;
+}
+
+function updateBeatSurvivorSave(mutator) {
+  const save = loadBeatSurvivorSave();
+  mutator(save);
+  return saveBeatSurvivorSave(save);
 }

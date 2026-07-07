@@ -6,6 +6,8 @@ class Game {
     this.listeners = [];
     this.state = 'title'; // title | playing | levelup | paused | dead | clear
     this.mode = MODE_NORMAL;
+    this.save = loadBeatSurvivorSave();
+    this.settings = { ...this.save.settings };
     this.ctrl = { mx: 0, my: 0 }; // 移動入力（-1..1、input.jsが書き込む）
     this.resetRun();
   }
@@ -22,8 +24,10 @@ class Game {
 
   resetRun() {
     this.rng = new RNG(this.seedValue);
+    this.rawTime = 0;
     this.time = 0;
     this.beat = 0;
+    this.audioBeat = 0;
     this.halfTick = 0;          // 経過した8分音符の数
     this.p = {
       x: 0, y: 0, r: PLAYER.r,
@@ -39,6 +43,7 @@ class Game {
     this.level = 1;
     this.xp = 0;
     this.groove = 0;
+    this.maxGrooveSeen = false;
     this.lastPerfectBeat = 0;
     this.kills = 0;
     this.stats = { perfect: 0, good: 0, miss: 0, maxGroove: 0, dmgDealt: 0 };
@@ -46,6 +51,15 @@ class Game {
     this.choices = [];
     this.spawnAcc = 0;
     this.spawnPressure = 0;
+    this.hitStopT = 0;
+    this.bossStopT = 0;
+    this.bossDefeatPending = null;
+    this.deathSlowT = 0;
+    this.deathFadeT = 0;
+    this.lastEnd = null;
+    this._sepHead = null;
+    this._sepNext = null;
+    this._sepTouched = [];
     this.accentUntil = 0;   // このビートまで全攻撃がアクセント（PERFECTで更新）
     this.echoQueue = [];    // ビート境界で発動する残響攻撃（ノヴァ2連など）
     this.bossSpawned = false;
@@ -70,8 +84,25 @@ class Game {
   }
 
   togglePause() {
-    if (this.state === 'playing') { this.state = 'paused'; this.emit('pause'); }
-    else if (this.state === 'paused') { this.state = 'playing'; this.emit('resume'); }
+    if (this.state === 'playing' || this.state === 'levelup') this.pause();
+    else if (this.state === 'paused') this.resume();
+  }
+
+  pause() {
+    if (this.state !== 'playing' && this.state !== 'levelup') return false;
+    this.pausedFrom = this.state;
+    this.state = 'paused';
+    this.emit('pause');
+    return true;
+  }
+
+  resume() {
+    if (this.state !== 'paused') return false;
+    this.state = this.pausedFrom || 'playing';
+    this.pausedFrom = null;
+    this.lastPerfectBeat = this.beat;
+    this.emit('resume');
+    return true;
   }
 
   grooveMult() { return 1 + Math.min(this.groove, GROOVE_MAX) * GROOVE_STEP; }
@@ -84,8 +115,42 @@ class Game {
   perfectWindow() { return PERFECT_MS + this.passives.metronome * 25; }
   currentBpm() { return bpmForTime(this.mode, this.time); }
   currentBeatMs() { return 60000 / this.currentBpm(); }
+  audioBpm() { return bpmForTime(this.mode, this.rawTime); }
+  audioBeatMs() { return 60000 / this.audioBpm(); }
   isEndless() { return this.mode === MODE_ENDLESS; }
   score() { return Math.floor(this.time) + this.kills; }
+
+  currentTimeScale() {
+    if (this.bossStopT > 0 || this.hitStopT > 0) return 0;
+    if (this.state === 'dying') return this.deathSlowT > 0 ? DEATH_SLOW_SCALE : 0;
+    return 1;
+  }
+
+  startHitStop(sec) {
+    this.hitStopT = Math.max(this.hitStopT, sec);
+  }
+
+  setGrooveValue(next, reason = '') {
+    const prev = this.groove;
+    const prevTier = this.tier();
+    this.groove = Math.max(0, Math.min(next, GROOVE_MAX));
+    this.stats.maxGroove = Math.max(this.stats.maxGroove, this.groove);
+    const nextTier = this.tier();
+    if (nextTier > prevTier && nextTier > 0) {
+      this.startHitStop(TIER_HITSTOP_SEC);
+      this.emit('groove-tier', {
+        tier: nextTier,
+        groove: this.groove,
+        color: TIER_COLORS[Math.min(nextTier, TIER_COLORS.length - 1)],
+        reason,
+      });
+    }
+    if (this.groove >= GROOVE_MAX && prev < GROOVE_MAX) {
+      const strong = !this.maxGrooveSeen;
+      this.maxGrooveSeen = true;
+      this.emit('maxgroove', { strong, reason });
+    }
+  }
 
   timeForBeat(targetBeat, offsetMs = 0) {
     let lo = Math.max(0, this.time - 1);
@@ -110,9 +175,8 @@ class Game {
     let judge;
     if (abs <= this.perfectWindow()) {
       judge = 'perfect';
-      this.groove = Math.min(this.groove + 1, GROOVE_MAX);
+      this.setGrooveValue(this.groove + 1, 'perfect');
       this.stats.perfect++;
-      this.stats.maxGroove = Math.max(this.stats.maxGroove, this.groove);
       this.lastPerfectBeat = this.beat;
       // PERFECT直後はしばらく全攻撃がアクセント（強化）される
       this.accentUntil = Math.floor(this.beat) + ACCENT_BEATS;
@@ -124,7 +188,7 @@ class Game {
     } else {
       judge = 'miss';
       this.stats.miss++;
-      this.groove = Math.max(0, this.groove - MISS_PENALTY);
+      this.setGrooveValue(this.groove - MISS_PENALTY, 'miss');
     }
     // ダッシュ方向 = 移動入力（なければ向いている方向）
     let dx = this.ctrl.mx, dy = this.ctrl.my;
@@ -142,14 +206,33 @@ class Game {
 
   // ===== 更新 =====
   update(dtMs) {
-    // levelup中もビートクロックだけは進める（音楽と演出を止めないため）
-    if (this.state !== 'playing' && this.state !== 'levelup') return;
+    if (this.state !== 'playing' && this.state !== 'levelup' && this.state !== 'dying') return;
     let acc = Math.min(dtMs, 100) / 1000;
     const STEP = 1 / 120;
-    while (acc > 0 && (this.state === 'playing' || this.state === 'levelup')) {
+    while (acc > 0 && (this.state === 'playing' || this.state === 'levelup' || this.state === 'dying')) {
       const h = Math.min(acc, STEP);
-      this.tick(h);
+      this.rawTime += h;
+      this.audioBeat = beatAtTime(this.mode, this.rawTime);
+      this.updateCinematics(h);
+      if (this.state !== 'playing' && this.state !== 'levelup' && this.state !== 'dying') break;
+      const scale = this.currentTimeScale();
+      if (scale > 0) this.tick(h * scale);
       acc -= h;
+    }
+  }
+
+  updateCinematics(dt) {
+    this.hitStopT = Math.max(0, this.hitStopT - dt);
+    if (this.bossStopT > 0) {
+      this.bossStopT = Math.max(0, this.bossStopT - dt);
+      if (this.bossStopT === 0 && this.bossDefeatPending) this.resolveBossDefeat();
+    }
+    if (this.state === 'dying') {
+      if (this.deathSlowT > 0) this.deathSlowT = Math.max(0, this.deathSlowT - dt);
+      else {
+        this.deathFadeT = Math.max(0, this.deathFadeT - dt);
+        if (this.deathFadeT === 0) this.finish('dead');
+      }
     }
   }
 
@@ -207,7 +290,7 @@ class Game {
 
     // GROOVE減衰: PERFECTが途切れると1ビートごとに減衰
     if (this.groove > 0 && this.beat - this.lastPerfectBeat > GROOVE_DECAY_BEATS) {
-      this.groove = Math.max(0, this.groove - GROOVE_DECAY_PER_BEAT);
+      this.setGrooveValue(this.groove - GROOVE_DECAY_PER_BEAT, 'decay');
       this.emit('groovedecay', { groove: this.groove });
     }
 
@@ -354,27 +437,72 @@ class Game {
         p.hp -= e.dmg;
         p.hurtCd = PLAYER.hurtCooldown;
         this.emit('hurt', { dmg: e.dmg, hp: p.hp });
-        if (p.hp <= 0) { this.finish('dead'); return; }
+        if (p.hp <= 0) { this.startDeath(); return; }
       }
     }
-    // 敵同士の押し合い（重なり防止）
+    this.separateEnemiesGrid();
+  }
+
+  separatePair(a, b) {
+    const dx = b.x - a.x;
+    if (dx > 40 || dx < -40) return;
+    const dy = b.y - a.y;
+    if (dy > 40 || dy < -40) return;
+    const rr = a.r + b.r;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > 0.01 && d2 < rr * rr) {
+      const d = Math.sqrt(d2);
+      const push = (rr - d) / d * 0.5;
+      a.x -= dx * push; a.y -= dy * push;
+      b.x += dx * push; b.y += dy * push;
+    }
+  }
+
+  separateEnemiesGrid() {
     const es = this.enemies;
+    const cell = ENEMY_GRID_CELL;
+    const dim = 128;
+    const offset = 64;
+    if (!this._sepHead) {
+      this._sepHead = new Int32Array(dim * dim);
+      this._sepHead.fill(-1);
+    }
+    if (!this._sepNext || this._sepNext.length < es.length) this._sepNext = new Int32Array(Math.max(ENEMY_CAP + 8, es.length));
+    const head = this._sepHead;
+    const next = this._sepNext;
+    const touched = this._sepTouched;
+    touched.length = 0;
     for (let i = 0; i < es.length; i++) {
-      for (let j = i + 1; j < es.length; j++) {
-        const a = es[i], b = es[j];
-        const dx = b.x - a.x;
-        if (dx > 40 || dx < -40) continue;
-        const dy = b.y - a.y;
-        if (dy > 40 || dy < -40) continue;
-        const rr = a.r + b.r;
-        const d2 = dx * dx + dy * dy;
-        if (d2 > 0.01 && d2 < rr * rr) {
-          const d = Math.sqrt(d2);
-          const push = (rr - d) / d * 0.5;
-          a.x -= dx * push; a.y -= dy * push;
-          b.x += dx * push; b.y += dy * push;
+      const e = es[i];
+      const gx = Math.floor(e.x / cell);
+      const gy = Math.floor(e.y / cell);
+      const cx = Math.max(0, Math.min(dim - 1, gx + offset));
+      const cy = Math.max(0, Math.min(dim - 1, gy + offset));
+      const idx = cx + cy * dim;
+      const lx = e.x - gx * cell;
+      const ly = e.y - gy * cell;
+      const xs = [cx];
+      const ys = [cy];
+      if (lx < 40 && cx > 0) xs.push(cx - 1);
+      else if (lx > cell - 40 && cx < dim - 1) xs.push(cx + 1);
+      if (ly < 40 && cy > 0) ys.push(cy - 1);
+      else if (ly > cell - 40 && cy < dim - 1) ys.push(cy + 1);
+      for (const nx of xs) {
+        for (const ny of ys) {
+          for (let j = head[nx + ny * dim]; j !== -1; j = next[j]) this.separatePair(es[j], e);
         }
       }
+      if (head[idx] === -1) touched.push(idx);
+      next[i] = head[idx];
+      head[idx] = i;
+    }
+    for (const idx of touched) head[idx] = -1;
+  }
+
+  separateEnemiesBruteForce() {
+    const es = this.enemies;
+    for (let i = 0; i < es.length; i++) {
+      for (let j = i + 1; j < es.length; j++) this.separatePair(es[i], es[j]);
     }
   }
 
@@ -395,17 +523,38 @@ class Game {
     this.emit('kill', { x: e.x, y: e.y, type: e.type, groove: this.groove });
     if (e.type === 'boss') {
       this.bossRef = null;
-      this.emit('bossdead');
-      if (this.isEndless()) {
-        this.groove = GROOVE_MAX;
-        this.stats.maxGroove = Math.max(this.stats.maxGroove, this.groove);
-        const bonus = xpForLevel(this.level);
-        this.addXp(bonus);
-        this.emit('bossreward', { groove: this.groove, xp: bonus, rank: this.bossSpawns });
-      } else {
-        this.finish('clear');
-      }
+      this.startBossDefeat(e);
     }
+  }
+
+  startBossDefeat(e) {
+    this.bossStopT = BOSS_DEFEAT_STOP_SEC;
+    this.bossDefeatPending = { x: e.x, y: e.y, mode: this.mode, rank: this.bossSpawns };
+    this.emit('bossdefeat-start', this.bossDefeatPending);
+  }
+
+  resolveBossDefeat() {
+    const data = this.bossDefeatPending;
+    this.bossDefeatPending = null;
+    this.emit('bossdead', data || {});
+    this.emit('bossdefeat-explode', data || {});
+    if (this.isEndless()) {
+      this.setGrooveValue(GROOVE_MAX, 'boss');
+      const bonus = xpForLevel(this.level);
+      this.addXp(bonus);
+      this.emit('bossreward', { groove: this.groove, xp: bonus, rank: data?.rank ?? this.bossSpawns });
+    } else {
+      this.finish('clear');
+    }
+  }
+
+  startDeath() {
+    if (this.state === 'dying' || this.state === 'dead') return;
+    this.p.hp = 0;
+    this.state = 'dying';
+    this.deathSlowT = DEATH_SLOW_SEC;
+    this.deathFadeT = DEATH_FADE_SEC;
+    this.emit('deathstart', { x: this.p.x, y: this.p.y });
   }
 
   areaDamage(x, y, radius, dmg, kb = 0) {
@@ -632,21 +781,25 @@ class Game {
   finish(result) {
     this.state = result;
     const bpm = this.currentBpm();
-    let bestTime = 0;
-    if (this.isEndless()) {
-      try {
-        bestTime = Number(localStorage.getItem(ENDLESS_BEST_KEY) || 0);
-        if (this.time > bestTime) {
-          bestTime = Math.floor(this.time);
-          localStorage.setItem(ENDLESS_BEST_KEY, String(bestTime));
-        }
-      } catch (_) {}
+    let save = loadBeatSurvivorSave();
+    if (this.isEndless() && result === 'dead') {
+      save = updateBeatSurvivorSave((s) => {
+        s.best.endlessTime = Math.max(s.best.endlessTime || 0, Math.floor(this.time));
+        s.settings = { ...this.settings };
+      });
+    } else if (!this.isEndless() && result === 'clear') {
+      save = updateBeatSurvivorSave((s) => {
+        s.best.normalTime = Math.max(s.best.normalTime || 0, Math.floor(this.time));
+        s.settings = { ...this.settings };
+      });
     }
-    this.emit(result, {
+    const data = {
       time: Math.round(this.time), level: this.level, kills: this.kills,
-      mode: this.mode, score: this.score(), bpm: Math.round(bpm), bestTime,
+      mode: this.mode, score: this.score(), bpm: Math.round(bpm), bestTime: save.best.endlessTime || 0,
       ...this.stats,
-    });
+    };
+    this.lastEnd = data;
+    this.emit(result, data);
   }
 
   // ===== デバッグ/検証用 =====
@@ -655,8 +808,18 @@ class Game {
       state: this.state,
       mode: this.mode,
       time: Math.round(this.time * 100) / 100,
+      rawTime: Math.round(this.rawTime * 100) / 100,
       beat: Math.round(this.beat * 100) / 100,
+      audioBeat: Math.round(this.audioBeat * 100) / 100,
       bpm: Math.round(this.currentBpm() * 100) / 100,
+      audioBpm: Math.round(this.audioBpm() * 100) / 100,
+      timeScale: this.currentTimeScale(),
+      timers: {
+        hitStop: Math.round(this.hitStopT * 1000),
+        bossStop: Math.round(this.bossStopT * 1000),
+        deathSlow: Math.round(this.deathSlowT * 1000),
+        deathFade: Math.round(this.deathFadeT * 1000),
+      },
       beatOffsetMs: Math.round((this.beat - Math.round(this.beat)) * this.currentBeatMs()),
       hp: Math.round(this.p.hp), maxHp: this.p.maxHp,
       pos: { x: Math.round(this.p.x), y: Math.round(this.p.y) },
@@ -668,6 +831,7 @@ class Game {
       bossSpawns: this.bossSpawns, nextBossTime: this.nextBossTime,
       enemies: this.enemies.length, bullets: this.bullets.length, gems: this.gems.length,
       weapons: { ...this.weapons }, passives: { ...this.passives },
+      settings: { ...this.settings },
       boss: this.bossRef ? { hp: Math.round(this.bossRef.hp), x: Math.round(this.bossRef.x), y: Math.round(this.bossRef.y) } : null,
       pendingLevels: this.pendingLevels,
       choices: this.choices.map((c) => `${c.name} Lv${c.lv}`),

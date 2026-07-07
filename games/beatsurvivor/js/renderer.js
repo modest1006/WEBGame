@@ -13,6 +13,7 @@ class Renderer {
     this.trail = [];      // ダッシュ残像
     this.shakeT = 0; this.shakeMag = 0;
     this.hurtFlash = 0;
+    this.fullPulse = null;
     this.resize();
   }
 
@@ -80,6 +81,46 @@ class Renderer {
         this.texts.push({ x: p.x, y: p.y - 80, text: '⚠ BOSS ⚠', color: '#ffd23e', age: 0, size: 26 });
         this.shakeT = 400; this.shakeMag = 6;
         break;
+      case 'groove-tier':
+        this.rings.push({ x: p.x, y: p.y, r: 24, max: 170, life: 0.42, age: 0, color: data.color, w: 7 });
+        this.texts.push({ x: p.x, y: p.y - 52, text: `TIER ${data.tier}`, color: data.color, age: 0, size: 20 });
+        this.shakeT = 140; this.shakeMag = 4;
+        break;
+      case 'maxgroove':
+        this.fullPulse = { age: 0, life: data.strong ? 0.6 : 0.34, strong: data.strong };
+        this.texts.push({ x: p.x, y: p.y - 70, text: 'MAX GROOVE', color: '#ffd23e', age: 0, size: data.strong ? 28 : 20 });
+        this.shakeT = data.strong ? 260 : 120; this.shakeMag = data.strong ? 7 : 3;
+        break;
+      case 'bossdefeat-start':
+        this.texts.push({ x: data.x ?? p.x, y: (data.y ?? p.y) - 80, text: 'OVERLOAD', color: '#ffffff', age: 0, size: 24, life: 1.2 });
+        this.rings.push({ x: data.x ?? p.x, y: data.y ?? p.y, r: 32, max: 120, life: 1.2, age: 0, color: '#ffffff', w: 9 });
+        this.shakeT = 1200; this.shakeMag = 5;
+        break;
+      case 'bossdefeat-explode':
+        this.rings.push({ x: data.x ?? p.x, y: data.y ?? p.y, r: 30, max: 900, life: 0.75, age: 0, color: '#ffffff', w: 12 });
+        for (let i = 0; i < 90; i++) {
+          this.particles.push({
+            x: data.x ?? p.x, y: data.y ?? p.y,
+            vx: (Math.random() - 0.5) * 760, vy: (Math.random() - 0.5) * 760,
+            life: 0.55 + Math.random() * 0.65, age: 0,
+            size: 3 + Math.random() * 6, color: i % 3 === 0 ? '#ffffff' : '#ffd23e',
+          });
+        }
+        this.fullPulse = { age: 0, life: 0.45, strong: true };
+        this.shakeT = 620; this.shakeMag = 14;
+        break;
+      case 'deathstart':
+        for (let i = 0; i < 56; i++) {
+          this.particles.push({
+            x: data.x ?? p.x, y: data.y ?? p.y,
+            vx: (Math.random() - 0.5) * 420, vy: (Math.random() - 0.5) * 420,
+            life: 0.7 + Math.random() * 0.6, age: 0,
+            size: 2 + Math.random() * 4, color: i % 2 ? '#3be8f0' : '#f04dd8',
+          });
+        }
+        this.hurtFlash = 0.55;
+        this.shakeT = 420; this.shakeMag = 9;
+        break;
       case 'titlecard':
         this.texts.push({ x: p.x, y: p.y - 120, text: data.title, color: '#ffd23e', age: 0, size: 34, life: 1.6 });
         this.shakeT = 500; this.shakeMag = 5;
@@ -95,6 +136,8 @@ class Renderer {
     const { ctx } = this;
     const W = this.canvas.width, H = this.canvas.height;
     const p = game.p;
+    const reducedFlash = game.settings?.reducedFlash === true;
+    const allowShake = game.settings?.screenShake !== false;
     const beatFrac = ((game.beat % 1) + 1) % 1;
     const pulse = Math.max(0, 1 - beatFrac * 2.6); // ビート直後1→0
     const grooveN = Math.min(game.groove, GROOVE_MAX) / GROOVE_MAX;
@@ -117,7 +160,9 @@ class Renderer {
     if (this.shakeT > 0) {
       this.shakeT -= dtMs;
       const k = Math.max(this.shakeT, 0) / 300 * this.shakeMag * this.dpr;
-      shX = (Math.random() - 0.5) * k; shY = (Math.random() - 0.5) * k;
+      if (allowShake) {
+        shX = (Math.random() - 0.5) * k; shY = (Math.random() - 0.5) * k;
+      }
     }
     const z = this.zoom * this.dpr;
     ctx.setTransform(z, 0, 0, z, W / 2 - this.camX * z + shX, H / 2 - this.camY * z + shY);
@@ -247,7 +292,7 @@ class Renderer {
     }
 
     // プレイヤー（GROOVEオーラ＋本体）
-    if (game.state !== 'dead') {
+    if (game.state !== 'dead' && game.state !== 'dying') {
       if (game.groove > 0) {
         ctx.fillStyle = `rgba(255, 210, 62, ${0.05 + grooveN * 0.12 + pulse * 0.06})`;
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 10 + grooveN * 18, 0, Math.PI * 2); ctx.fill();
@@ -297,12 +342,24 @@ class Renderer {
     ctx.globalAlpha = 1;
 
     // 被弾ビネット
+    if (this.fullPulse) {
+      this.fullPulse.age += dt;
+      const k = this.fullPulse.age / this.fullPulse.life;
+      if (k >= 1) this.fullPulse = null;
+      else {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const alpha = (this.fullPulse.strong ? 0.32 : 0.16) * (1 - k) * (reducedFlash ? 0.35 : 1);
+        ctx.fillStyle = `rgba(255, 242, 180, ${alpha})`;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
+
     if (this.hurtFlash > 0) {
       this.hurtFlash -= dt;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.75);
       v.addColorStop(0, 'rgba(255,0,60,0)');
-      v.addColorStop(1, `rgba(255,0,60,${this.hurtFlash * 0.9})`);
+      v.addColorStop(1, `rgba(255,0,60,${this.hurtFlash * (reducedFlash ? 0.28 : 0.9)})`);
       ctx.fillStyle = v;
       ctx.fillRect(0, 0, W, H);
     }

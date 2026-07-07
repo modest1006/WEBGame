@@ -45,6 +45,18 @@ function modeSelectHtml() {
     + '</div>';
 }
 
+function settingsHtml() {
+  return '<div class="settings-panel">'
+    + `<button class="setting-toggle" data-setting="screenShake">SHAKE <b>${game.settings.screenShake ? 'ON' : 'OFF'}</b></button>`
+    + `<button class="setting-toggle" data-setting="reducedFlash">FLASH <b>${game.settings.reducedFlash ? 'LOW' : 'FULL'}</b></button>`
+    + '</div>';
+}
+
+function saveSettings() {
+  const saved = updateBeatSurvivorSave((data) => { data.settings = { ...game.settings }; });
+  game.save = saved;
+}
+
 function syncModeButtons() {
   for (const btn of document.querySelectorAll('[data-mode]')) {
     btn.classList.toggle('active', btn.dataset.mode === selectedMode);
@@ -62,7 +74,7 @@ function syncOverlay() {
         + 'キー入力 / タップ でスタート');
       break;
     case 'paused':
-      showOverlay('PAUSE', 'P / ⏸ で再開');
+      showOverlay('PAUSE', settingsHtml() + 'P / Esc to resume');
       break;
     case 'dead':
       showOverlay('GAME OVER', statLine(game.lastEnd ?? {}) + '<br><br>キー入力 / タップ でリトライ');
@@ -121,6 +133,9 @@ game.on((type, data) => {
   switch (type) {
     case 'beat': onBeatUI(); break;
     case 'dash': music.sfx(data.judge, data); break;
+    case 'maxgroove': music.sfx('maxgroove', data); break;
+    case 'bossdefeat-explode': music.sfx('bossboom', data); break;
+    case 'deathstart': music.sfx('hurt'); break;
     case 'kill': music.sfx('kill'); break;
     case 'hurt': music.sfx('hurt'); break;
     case 'gem': music.sfx('gem'); break;
@@ -147,8 +162,9 @@ const actions = {
     syncOverlay();
   },
   pause: () => {
-    if (game.state === 'playing' || game.state === 'paused') {
+    if (game.state === 'playing' || game.state === 'levelup' || game.state === 'paused') {
       game.togglePause();
+      if (game.state !== 'paused') music.unlock();
       syncOverlay();
     }
   },
@@ -178,8 +194,26 @@ overlay.addEventListener('pointerdown', (e) => {
   game.setMode(selectedMode);
   syncModeButtons();
 });
+overlay.addEventListener('pointerdown', (e) => {
+  const settingBtn = e.target.closest('[data-setting]');
+  if (!settingBtn) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  const key = settingBtn.dataset.setting;
+  if (key === 'screenShake') game.settings.screenShake = !game.settings.screenShake;
+  if (key === 'reducedFlash') game.settings.reducedFlash = !game.settings.reducedFlash;
+  saveSettings();
+  syncOverlay();
+});
 overlay.addEventListener('pointerdown', (e) => { e.preventDefault(); actions.anyInput(); });
 window.addEventListener('resize', () => renderer.resize());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && (game.state === 'playing' || game.state === 'levelup')) {
+    game.pause();
+    music.stop();
+    syncOverlay();
+  }
+});
 
 // HUD
 const hud = {

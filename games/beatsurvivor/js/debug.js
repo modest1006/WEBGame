@@ -10,7 +10,7 @@ function installDebug(game) {
     if (wasPaused) game.state = 'playing';
     let rest = ms;
     // levelup中もビートクロックが進むので step 可能にする
-    while (rest > 0 && (game.state === 'playing' || game.state === 'levelup')) {
+    while (rest > 0 && (game.state === 'playing' || game.state === 'levelup' || game.state === 'dying')) {
       const d = Math.min(rest, 1000 / 60);
       game.update(d);
       rest -= d;
@@ -34,8 +34,8 @@ function installDebug(game) {
     },
     start: (mode) => game.start(mode),
     setMode: (mode) => game.setMode(mode),
-    pause: () => { if (game.state === 'playing') game.togglePause(); },
-    resume: () => { if (game.state === 'paused') game.togglePause(); },
+    pause: () => game.pause(),
+    resume: () => game.resume(),
     hold: (mx, my) => { game.ctrl.mx = mx; game.ctrl.my = my; },
     dash: () => {
       const wasPaused = game.state === 'paused';
@@ -59,9 +59,31 @@ function installDebug(game) {
     },
     choices: () => game.choices.map((c, i) => `${i}: ${c.name} Lv${c.lv}`),
     pick: (i) => game.pick(i),
-    setGroove: (n) => { game.groove = Math.max(0, Math.min(Number(n) || 0, GROOVE_MAX)); game.lastPerfectBeat = game.beat; },
+    setGroove: (n) => { game.setGrooveValue(Number(n) || 0, 'debug'); game.lastPerfectBeat = game.beat; },
     setHp: (n) => { game.p.hp = n; },
     teleport: (x, y) => { game.p.x = x; game.p.y = y; },
+    benchSeparation(iter = 200) {
+      const saved = game.enemies.map((e) => ({ ...e }));
+      const fill = () => {
+        game.enemies = [];
+        for (let i = 0; i < ENEMY_CAP; i++) {
+          const a = i * 2.399963;
+          const r = 120 + (i % 97) / 97 * 1120;
+          const e = game.spawnEnemy(i % 8 === 0 ? 'tank' : 'chaser', Math.cos(a) * r, Math.sin(a) * r);
+          if (e) { e.kbx = 0; e.kby = 0; }
+        }
+      };
+      fill();
+      const t0 = performance.now();
+      for (let i = 0; i < iter; i++) game.separateEnemiesBruteForce();
+      const bruteMs = (performance.now() - t0) / iter;
+      fill();
+      const t1 = performance.now();
+      for (let i = 0; i < iter; i++) game.separateEnemiesGrid();
+      const gridMs = (performance.now() - t1) / iter;
+      game.enemies = saved;
+      return { enemies: ENEMY_CAP, iter, bruteMs, gridMs };
+    },
   };
 
   return {
@@ -80,7 +102,8 @@ function installDebug(game) {
       const s = game.getSnapshot();
       overlay.textContent = [
         `FPS ${fps}  state ${s.state}  t ${s.time}s`,
-        `beat ${s.beat} (offset ${s.beatOffsetMs}ms)`,
+        `beat ${s.beat} audio ${s.audioBeat} (offset ${s.beatOffsetMs}ms) scale ${s.timeScale}`,
+        `timers ${JSON.stringify(s.timers)}`,
         `hp ${s.hp}/${s.maxHp}  lv ${s.level}  xp ${s.xp}/${s.xpNext}`,
         `groove ${s.groove} x${s.grooveMult}  P${s.stats.perfect}/G${s.stats.good}/M${s.stats.miss}`,
         `enemies ${s.enemies}  bullets ${s.bullets}  gems ${s.gems}  kills ${s.kills}`,

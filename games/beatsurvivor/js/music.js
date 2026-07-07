@@ -38,13 +38,13 @@ class Music {
   // game.beat → audio時刻の変換（毎スケジュールで再アンカー）
   schedule() {
     if (!this.ctx || this.game.state === 'title') return;
-    const beatSec = this.game.currentBeatMs ? this.game.currentBeatMs() / 1000 : 60 / BPM;
+    const beatSec = this.game.audioBeatMs ? this.game.audioBeatMs() / 1000 : 60 / BPM;
     const now = this.ctx.currentTime;
     // 再アンカー: 現在のgame.beatがnowに対応する
-    this.anchorBeat = this.game.beat;
+    this.anchorBeat = this.game.audioBeat ?? this.game.beat;
     this.anchorTime = now;
     const stepSec = beatSec / 4;
-    const curStep = Math.floor(this.game.beat * 4);
+    const curStep = Math.floor((this.game.audioBeat ?? this.game.beat) * 4);
     if (this.nextStep < curStep) this.nextStep = curStep;
     // 0.18秒先までスケジュール
     while (true) {
@@ -52,7 +52,7 @@ class Music {
       if (t > now + 0.18) break;
       const st = this.game.state;
       // levelup中も曲を止めない（体験をぶつ切りにしない）
-      if (t >= now - 0.02 && (st === 'playing' || st === 'levelup')) this.playStep(this.nextStep, Math.max(t, now + 0.001));
+      if (t >= now - 0.02 && (st === 'playing' || st === 'levelup' || st === 'dying')) this.playStep(this.nextStep, Math.max(t, now + 0.001));
       this.nextStep++;
     }
   }
@@ -244,6 +244,22 @@ class Music {
         });
         break;
       }
+      case 'maxgroove':
+        this.pluck(t, data.strong ? 1320 : 990, data.strong ? 0.26 : 0.12);
+        this.pluck(t + 0.05, data.strong ? 1980 : 1485, data.strong ? 0.18 : 0.08);
+        break;
+      case 'bossboom':
+        this.noise({ dur: 0.35, gain: 0.22, freq: 180 });
+        this.kick(t);
+        this.kick(t + 0.09);
+        break;
+    }
+  }
+
+  stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
     }
   }
 }
