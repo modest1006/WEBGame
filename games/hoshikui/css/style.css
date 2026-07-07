@@ -1,0 +1,53 @@
+* { box-sizing:border-box; }
+html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#050714; font-family:"Trebuchet MS","Yu Gothic",Meiryo,sans-serif; color:#eef7ff; touch-action:none; }
+button { font:inherit; border:1px solid rgba(166,220,255,.28); border-radius:8px; padding:10px 14px; background:rgba(8,18,36,.86); color:#eaf8ff; font-weight:800; box-shadow:0 0 18px rgba(98,184,255,.16); cursor:pointer; }
+button:active { transform:translateY(1px); }
+.shell, #view { position:fixed; inset:0; width:100%; height:100%; }
+#view { display:block; }
+.hud { position:fixed; left:16px; right:16px; top:14px; display:flex; gap:12px; align-items:flex-start; justify-content:space-between; pointer-events:none; z-index:5; }
+.brand, .stats div { background:rgba(5,10,24,.68); border:1px solid rgba(154,216,255,.22); border-radius:8px; padding:9px 12px; box-shadow:0 10px 34px rgba(0,0,0,.24); backdrop-filter:blur(8px); }
+.brand b { display:block; font-size:24px; letter-spacing:0; }
+.brand span, .stats span { display:block; color:#90c5e8; font-size:11px; font-weight:800; }
+.stats { display:grid; grid-template-columns:repeat(5,minmax(76px,1fr)); gap:8px; flex:1; max-width:650px; }
+.stats b { font-size:20px; line-height:1.1; color:#fff8c9; }
+.buttons { display:flex; gap:8px; pointer-events:auto; }
+.ticker { position:fixed; top:92px; left:50%; min-width:300px; transform:translateX(-50%); text-align:center; font-size:25px; font-weight:900; color:#ffffff; text-shadow:0 0 14px #65d8ff,0 2px 0 #06101e; opacity:0; pointer-events:none; z-index:8; }
+.ticker.show { animation:ticker 1.45s ease-out; }
+@keyframes ticker { 0%{opacity:0; transform:translate(48%,-10px) scale(.96)} 12%,78%{opacity:1} 100%{opacity:0; transform:translate(-80%,0) scale(1.04)} }
+.flash { position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none; z-index:7; }
+.flash.on { animation:flash .48s ease-out; }
+@keyframes flash { 0%{opacity:.92} 100%{opacity:0} }
+.overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(2,4,12,.42); z-index:10; }
+.overlay.hidden { display:none; }
+.panel { width:min(560px,calc(100vw - 32px)); background:rgba(5,11,27,.84); border-radius:8px; border:1px solid rgba(151,219,255,.28); padding:28px; text-align:center; box-shadow:0 24px 80px rgba(0,0,0,.38), inset 0 0 80px rgba(72,133,255,.08); }
+.panel h1 { margin:0 0 9px; font-size:42px; letter-spacing:0; }
+.panel p { margin:8px 0 16px; font-weight:800; color:#b8dcf2; overflow-wrap:anywhere; }
+.actions { display:flex; justify-content:center; gap:12px; flex-wrap:wrap; }
+.debug-overlay { position:fixed; left:10px; bottom:10px; max-width:560px; max-height:46vh; overflow:auto; padding:10px; margin:0; z-index:20; background:rgba(0,8,18,.82); color:#bdf6ff; font:12px/1.35 Consolas,monospace; white-space:pre-wrap; }
+.hidden { display:none; }
+.touch { display:none; }
+@media (pointer:coarse), (max-width:760px) {
+  .hud { left:8px; right:8px; top:8px; gap:6px; flex-wrap:wrap; }
+  .brand b { font-size:18px; }
+  .brand { order:1; }
+  .buttons { order:2; margin-left:auto; }
+  .stats { order:3; grid-template-columns:repeat(5,minmax(0,1fr)); max-width:none; width:100%; flex:0 0 100%; gap:5px; }
+  .stats div { padding:6px 6px; min-width:0; }
+  .stats b { font-size:14px; }
+  .buttons button { padding:8px 8px; font-size:12px; }
+  .ticker { top:112px; min-width:240px; font-size:19px; }
+  .panel { width:calc(100vw - 24px); padding:24px 16px; }
+  .panel h1 { font-size:30px; }
+  .touch { display:block; position:fixed; inset:0; z-index:4; pointer-events:none; }
+  .stick { position:absolute; left:24px; bottom:24px; width:112px; height:112px; border-radius:50%; background:rgba(141,204,255,.12); border:1px solid rgba(184,230,255,.52); box-shadow:0 0 24px rgba(76,180,255,.14); }
+  .stick i { position:absolute; left:39px; top:39px; width:34px; height:34px; border-radius:50%; background:#dff7ff; box-shadow:0 0 18px rgba(125,222,255,.5); }
+}
+@media (max-width:520px) {
+  .hud { right:auto; width:calc(100vw - 16px); max-width:374px; }
+  .buttons { order:4; width:100%; justify-content:flex-start; flex-wrap:wrap; gap:5px; }
+  .buttons button { padding:7px 6px; font-size:11px; }
+  .stats { order:2; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .overlay { justify-content:flex-start; padding-left:8px; }
+  .panel { width:calc(100vw - 16px); max-width:374px; }
+  .panel h1 { font-size:27px; }
+}

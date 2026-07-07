@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>星喰い HOSHIKUI</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css?v=2">
+</head>
+<body>
+  <main class="shell">
+    <canvas id="view" aria-label="HOSHIKUI 3D game canvas"></canvas>
+    <header class="hud">
+      <section class="brand"><b>星喰い</b><span id="hud-stage">岩石</span></section>
+      <section class="stats">
+        <div><span>MASS</span><b id="hud-mass">1.0</b></div>
+        <div><span>NEXT</span><b id="hud-next">3.2</b></div>
+        <div><span>TIME</span><b id="hud-time">240</b></div>
+        <div><span>EATEN</span><b id="hud-count">0</b></div>
+        <div><span>MOONS</span><b id="hud-moons">0</b></div>
+      </section>
+      <section class="buttons">
+        <button id="pause-btn" type="button">PAUSE</button>
+        <button id="mute-btn" type="button">SOUND</button>
+        <button id="restart-btn" type="button">RESTART</button>
+      </section>
+    </header>
+    <div id="ticker" class="ticker"></div>
+    <div id="flash" class="flash"></div>
+    <section id="touch" class="touch">
+      <div id="stick" class="stick"><i></i></div>
+    </section>
+    <section id="overlay" class="overlay">
+      <div class="panel">
+        <h1 id="overlay-title">星喰い HOSHIKUI</h1>
+        <p id="overlay-sub">岩石から始まり、銀河コアを喰らうブラックホールへ。</p>
+        <p id="overlay-result"></p>
+        <div class="actions">
+          <button id="play-btn" type="button">START</button>
+          <button id="again-btn" type="button">RESTART</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+  <script src="lib/three.min.js?v=2"></script>
+  <script src="js/rng.js?v=2"></script>
+  <script src="js/game.js?v=2"></script>
+  <script src="js/renderer.js?v=2"></script>
+  <script src="js/input.js?v=2"></script>
+  <script src="js/audio.js?v=2"></script>
+  <script src="js/debug.js?v=2"></script>
+  <script src="js/main.js?v=2"></script>
+</body>
+</html>

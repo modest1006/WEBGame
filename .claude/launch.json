@@ -50,6 +50,12 @@
       "port": 8131
     },
     {
+      "name": "hoshikui",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8132", "--directory", "games/hoshikui"],
+      "port": 8132
+    },
+    {
       "name": "bunnyhop",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8124", "--directory", "games/bunnyhop"],
