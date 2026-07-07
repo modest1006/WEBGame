@@ -44,6 +44,12 @@
       "port": 8130
     },
     {
+      "name": "korogari",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8131", "--directory", "games/korogari"],
+      "port": 8131
+    },
+    {
       "name": "bunnyhop",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8124", "--directory", "games/bunnyhop"],

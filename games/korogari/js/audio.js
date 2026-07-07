@@ -1,0 +1,10 @@
+(function () {
+  'use strict';
+  function AudioSys(){ this.ctx=null; this.muted=localStorage.getItem('korogari.muted')==='1'; this.master=null; this.bgm=null; this.next=0; }
+  AudioSys.prototype.unlock=function(){ if(this.ctx){ if(this.ctx.state==='suspended') this.ctx.resume(); return; } const A=AudioContext||webkitAudioContext; if(!A) return; this.ctx=new A(); this.master=this.ctx.createGain(); this.master.gain.value=this.muted?0:.72; this.master.connect(this.ctx.destination); this.bgm=this.ctx.createGain(); this.bgm.gain.value=.08; this.bgm.connect(this.master); };
+  AudioSys.prototype.toggleMute=function(){ this.muted=!this.muted; localStorage.setItem('korogari.muted',this.muted?'1':'0'); if(this.master) this.master.gain.setTargetAtTime(this.muted?0:.72,this.ctx.currentTime,.02); return this.muted; };
+  AudioSys.prototype.tone=function(freq,dur,gain,type,delay){ if(!this.ctx||this.muted) return; const t=this.ctx.currentTime+(delay||0), o=this.ctx.createOscillator(), g=this.ctx.createGain(); o.type=type||'triangle'; o.frequency.setValueAtTime(freq,t); o.frequency.exponentialRampToValueAtTime(Math.max(40,freq*.72),t+dur); g.gain.setValueAtTime(gain,t); g.gain.exponentialRampToValueAtTime(.001,t+dur); o.connect(g).connect(this.master); o.start(t); o.stop(t+dur+.03); };
+  AudioSys.prototype.event=function(type,data){ if(type==='absorb'){ const s=data.object.size, base=880/(1+s*1.8)+data.combo*12; this.tone(base,.11,.09,'triangle'); } if(type==='grow'){ [523,659,784,1046].forEach((f,i)=>this.tone(f,.18,.1,'square',i*.08)); } if(type==='bump'){ this.tone(150,.16,.18,'sawtooth'); this.tone(330,.08,.08,'square',.07); } if(type==='finish'){ this.tone(data.win?784:220,.4,.14,'triangle'); } };
+  AudioSys.prototype.update=function(game){ if(!this.ctx||this.muted) return; const now=this.ctx.currentTime; if(now<this.next) return; const stage=game.goalIndex||0, root=110*Math.pow(2,stage/12); const swing=[0,.34,.5,.84][Math.floor((now*2)%4)]; this.tone(root,.08,.035,'sine'); this.tone(root*1.5,.045,.022,'triangle',swing*.2); this.next=now+.42; };
+  window.KorogariAudio = AudioSys;
+})();
