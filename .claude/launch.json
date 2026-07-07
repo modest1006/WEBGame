@@ -62,6 +62,12 @@
       "port": 8133
     },
     {
+      "name": "oneman",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8134", "--directory", "games/oneman"],
+      "port": 8134
+    },
+    {
       "name": "bunnyhop",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8124", "--directory", "games/bunnyhop"],

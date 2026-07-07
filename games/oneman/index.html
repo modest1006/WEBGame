@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ワンマン運転士 ONE-MAN DRIVER</title>
+  <link rel="stylesheet" href="css/style.css?v=2">
+</head>
+<body class="title">
+  <main id="shell">
+    <canvas id="view" aria-label="ONE-MAN DRIVER 3D view"></canvas>
+    <header id="top-led"><span>次は　たばがわ　田場川　　停止位置 2両</span></header>
+
+    <section id="speed-meter" aria-label="速度計">
+      <div class="dial">
+        <div class="ticks"></div>
+        <i id="speed-needle"></i>
+        <b id="speed-text">072</b>
+        <small>km/h</small>
+      </div>
+    </section>
+
+    <section id="distance-board"><span id="dist-text">のこり 480m</span></section>
+    <section id="final-panel"><b id="final-counter">15.00m</b></section>
+
+    <section id="brake-lever" aria-label="ブレーキレバー">
+      <div class="rail"></div>
+      <div id="lever-knob"></div>
+      <div class="scale">
+        <span class="notch">N</span><span class="notch">B1</span><span class="notch">B2</span><span class="notch">B3</span><span class="notch">B4</span>
+        <span class="notch">B5</span><span class="notch">B6</span><span class="notch">B7</span><span class="notch">B8</span><span class="notch">EB</span>
+      </div>
+    </section>
+
+    <section id="dimension">
+      <div class="dim-line"><i></i><b id="dimension-value"></b><i></i></div>
+    </section>
+
+    <section id="result">
+      <h2 id="result-title"></h2>
+      <p id="result-body"></p>
+    </section>
+
+    <section id="title-panel">
+      <h1>ワンマン運転士<br><span>ONE-MAN DRIVER</span></h1>
+      <p>残距離・初速・勾配が毎回変わる。ブレーキだけで停止位置を狙う Phase 1 コア。</p>
+      <button id="start-btn" type="button">START</button>
+    </section>
+
+    <aside id="mini-debug">
+      <span>PHASE <b id="phase">TITLE</b></span>
+      <span>NOTCH <b id="notch">N</b></span>
+      <span>EFF <b id="eff">0.00</b></span>
+      <span>GRADE <b id="grade">0.0‰</b></span>
+      <button id="mute-btn" type="button">SOUND</button>
+    </aside>
+
+    <div id="transition" class="fade"></div>
+    <pre id="debug-overlay" class="hidden"></pre>
+  </main>
+
+  <script src="lib/three.min.js?v=2"></script>
+  <script src="js/game.js?v=2"></script>
+  <script src="js/renderer.js?v=2"></script>
+  <script src="js/input.js?v=2"></script>
+  <script src="js/audio.js?v=2"></script>
+  <script src="js/debug.js?v=2"></script>
+  <script src="js/main.js?v=2"></script>
+</body>
+</html>
