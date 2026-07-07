@@ -26,6 +26,12 @@
       "port": 8127
     },
     {
+      "name": "teijidash",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8128", "--directory", "games/teijidash"],
+      "port": 8128
+    },
+    {
       "name": "bunnyhop",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8124", "--directory", "games/bunnyhop"],

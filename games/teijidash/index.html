@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>定時ダッシュ TEIJI DASH</title>
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+  <main class="shell">
+    <canvas id="view" aria-label="定時ダッシュ game canvas"></canvas>
+    <header class="hud">
+      <section class="panel">
+        <span>DAY</span>
+        <b id="day">MON</b>
+        <em id="act">仕込み</em>
+      </section>
+      <section class="brand">
+        <h1>定時ダッシュ</h1>
+        <p id="hint">Space / click / tap</p>
+      </section>
+      <section class="panel">
+        <span>SCORE</span>
+        <b id="score">0</b>
+        <em>BEST <strong id="best">0</strong></em>
+      </section>
+      <section class="buttons">
+        <button class="icon-btn" data-action="mute" id="mute-btn" aria-label="Mute">♪</button>
+        <button class="icon-btn" data-action="restart" aria-label="Restart">↻</button>
+      </section>
+    </header>
+    <div class="meter">
+      <div class="meter-label" id="meter-label">帰り支度 0%</div>
+      <div class="meter-bar"><i id="prep-bar"></i></div>
+    </div>
+    <div class="judge" id="judge"></div>
+    <div class="touch-hint">長押し / ジャストタップ</div>
+    <div class="overlay" id="overlay">
+      <div>
+        <h2 id="overlay-title">定時ダッシュ</h2>
+        <p id="overlay-sub">Space、クリック、タップで開始</p>
+      </div>
+    </div>
+  </main>
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+
+  <script src="js/constants.js?v=1"></script>
+  <script src="js/rng.js?v=1"></script>
+  <script src="js/game.js?v=1"></script>
+  <script src="js/renderer.js?v=1"></script>
+  <script src="js/input.js?v=1"></script>
+  <script src="js/music.js?v=1"></script>
+  <script src="js/debug.js?v=1"></script>
+  <script src="js/main.js?v=1"></script>
+</body>
+</html>

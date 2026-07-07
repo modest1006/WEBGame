@@ -1,0 +1,129 @@
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1e2630;
+  color: #fff8df;
+  font-family: "Arial", "Noto Sans JP", system-ui, sans-serif;
+  touch-action: none;
+  user-select: none;
+}
+.shell { position: fixed; inset: 0; overflow: hidden; background: #27313d; }
+#view { position: absolute; inset: 0; width: 100vw; height: 100vh; display: block; cursor: pointer; image-rendering: pixelated; }
+.hud {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1120px, calc(100vw - 20px));
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 170px 104px;
+  gap: 10px;
+  align-items: start;
+  pointer-events: none;
+}
+.panel {
+  min-height: 76px;
+  padding: 10px 12px;
+  border: 2px solid #2b2220;
+  border-radius: 8px;
+  background: rgba(255, 248, 223, 0.9);
+  color: #2b2220;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.24);
+}
+.panel span { display: block; font-size: 11px; font-weight: 900; }
+.panel b { display: block; margin-top: 2px; font-size: 28px; line-height: 1; }
+.panel em { display: block; margin-top: 5px; font-style: normal; font-size: 12px; font-weight: 800; }
+.brand { text-align: center; padding-top: 2px; text-shadow: 0 3px 0 #4a2d1e, 0 0 16px rgba(255, 191, 75, 0.65); min-width: 0; }
+.brand h1 { margin: 0; font-size: clamp(28px, 5vw, 64px); line-height: 0.96; font-weight: 900; }
+.brand p { margin: 7px 0 0; font-size: 13px; font-weight: 800; color: #fff0bb; }
+.buttons { display: flex; gap: 8px; justify-content: end; pointer-events: auto; }
+.icon-btn {
+  width: 46px;
+  height: 46px;
+  border: 2px solid #2b2220;
+  border-radius: 8px;
+  background: #ffe089;
+  color: #2b2220;
+  font: 900 23px Arial, sans-serif;
+  box-shadow: 0 4px 0 rgba(0,0,0,0.24);
+  cursor: pointer;
+}
+.icon-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,0.24); }
+.meter {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(680px, calc(100vw - 28px));
+  pointer-events: none;
+}
+.meter-label { margin-bottom: 6px; font-weight: 900; text-shadow: 0 2px 0 #2b2220; }
+.meter-bar { height: 22px; padding: 3px; border: 2px solid #2b2220; border-radius: 8px; background: #fff8df; box-shadow: 0 4px 0 rgba(0,0,0,0.22); }
+.meter-bar i { display: block; width: 0%; height: 100%; border-radius: 5px; background: linear-gradient(90deg, #49b86f, #ffe05d, #ff7b4f); }
+.judge {
+  position: absolute;
+  inset: auto 12px 116px 12px;
+  min-height: 64px;
+  text-align: center;
+  font-size: clamp(28px, 7vw, 88px);
+  line-height: 1;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 5px 0 #311f20, 0 0 22px rgba(255, 205, 76, 0.9);
+  pointer-events: none;
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  background: rgba(27, 34, 43, 0.76);
+  pointer-events: auto;
+}
+.overlay.hidden { display: none; }
+.overlay h2 {
+  margin: 0;
+  font-size: clamp(54px, 12vw, 126px);
+  line-height: 0.95;
+  text-shadow: 0 6px 0 #4a2d1e, 0 0 30px rgba(255, 166, 73, 0.75);
+}
+.overlay p { margin: 22px 0 0; font-size: clamp(15px, 2.5vw, 22px); font-weight: 800; line-height: 1.8; }
+.touch-hint {
+  display: none;
+  position: absolute;
+  right: 14px;
+  bottom: 62px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(43, 34, 32, 0.75);
+  font-weight: 900;
+  pointer-events: none;
+}
+.debug-overlay {
+  position: fixed;
+  z-index: 5;
+  top: 8px;
+  left: 8px;
+  min-width: 310px;
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.72);
+  color: #a7ffbd;
+  font: 12px Consolas, monospace;
+  pointer-events: none;
+}
+.hidden { display: none; }
+@media (pointer: coarse) {
+  .touch-hint { display: block; }
+  .hud { grid-template-columns: 92px 1fr 112px 52px; gap: 6px; top: 8px; }
+  .panel { min-height: 60px; padding: 7px 8px; }
+  .panel b { font-size: 20px; }
+  .brand p { font-size: 11px; }
+  .buttons { flex-direction: column; gap: 6px; }
+  .icon-btn { width: 44px; height: 38px; }
+}
