@@ -144,7 +144,37 @@
     for (let g = 0; g < 40; g++) game.generationStep();
   }
 
+  function setupBenchState() {
+    game.addPoints(10000);
+    for (let s = 1; s <= 6; s++) game.unlock(s);
+    game.resetDish();
+    [[46,46],[72,36],[98,48],[48,94],[74,104],[102,91]].forEach(function (p, i) {
+      game.scatter(p[0], p[1], i + 1, 13, game.densityForSpecies(i + 1));
+    });
+    for (let g = 0; g < 480; g++) game.generationStep();
+  }
+
   syncAll();
+  if (params.get('bench') === '1') {
+    setupBenchState();
+    syncAll();
+    renderer.render(game, 16);
+    const t0 = performance.now();
+    for (let i = 0; i < 100; i++) renderer.render(game, 16);
+    const avg = (performance.now() - t0) / 100;
+    const t1 = performance.now();
+    for (let i = 0; i < 100; i++) {
+      if (i % 8 === 0) game.generationStep();
+      renderer.render(game, 16);
+    }
+    const activeAvg = (performance.now() - t1) / 100;
+    const pre = document.createElement('pre');
+    pre.id = 'bench-result';
+    pre.textContent = JSON.stringify({ renderAvgMs: avg, activeAvgMs: activeAvg, frames: 100, population: game.population, generation: game.generation });
+    document.body.appendChild(pre);
+    const img = new Image();
+    img.src = 'bench-result?data=' + encodeURIComponent(pre.textContent);
+  }
   let last = performance.now();
   function frame(now) {
     try {

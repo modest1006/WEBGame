@@ -10,10 +10,24 @@
     this.offsetX = 0;
     this.offsetY = 0;
     this.zoom = 1;
+    this.baseCache = document.createElement('canvas');
+    this.topCache = document.createElement('canvas');
+    this.cellCanvas = document.createElement('canvas');
+    this.cellCanvas.width = 144;
+    this.cellCanvas.height = 144;
+    this.cellCtx = this.cellCanvas.getContext('2d', { willReadFrequently: false });
+    this.cellImage = this.cellCtx.createImageData(144, 144);
+    this.glowSmall = document.createElement('canvas');
+    this.glowSmall.width = 72;
+    this.glowSmall.height = 72;
+    this.lastCellGeneration = -1;
+    this.lastDecayKey = -1;
     this.bubbles = [];
     this.markers = [];
     this.stamps = [];
-    for (let i = 0; i < 42; i++) {
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    const bubbleCount = coarse ? 20 : 42;
+    for (let i = 0; i < bubbleCount; i++) {
       this.bubbles.push({ x: Math.random(), y: Math.random(), r: 0.003 + Math.random() * 0.014, v: 0.00003 + Math.random() * 0.00008, a: Math.random() * 6.28 });
     }
     this.resize();
@@ -21,7 +35,8 @@
 
   PetriRenderer.prototype.resize = function () {
     const rect = this.canvas.getBoundingClientRect();
-    this.dpr = Math.min(2, window.devicePixelRatio || 1);
+    const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    this.dpr = coarse ? 1 : Math.min(1.5, window.devicePixelRatio || 1);
     this.canvas.width = Math.max(1, Math.floor(rect.width * this.dpr));
     this.canvas.height = Math.max(1, Math.floor(rect.height * this.dpr));
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -30,6 +45,54 @@
     this.cell = this.size / 144 * this.zoom;
     this.offsetX = (w - this.cell * 144) / 2;
     this.offsetY = (h - this.cell * 144) / 2;
+    this.rebuildStaticCaches(w, h);
+  };
+
+  PetriRenderer.prototype.prepareCache = function (canvas, w, h) {
+    canvas.width = Math.max(1, Math.floor(w * this.dpr));
+    canvas.height = Math.max(1, Math.floor(h * this.dpr));
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    return ctx;
+  };
+
+  PetriRenderer.prototype.rebuildStaticCaches = function (w, h) {
+    const cx = w / 2, cy = h / 2, rad = this.cell * 69.5;
+    let ctx = this.prepareCache(this.baseCache, w, h);
+    const bg = ctx.createRadialGradient(cx, cy, rad * 0.2, cx, cy, Math.max(w, h) * 0.65);
+    bg.addColorStop(0, '#27303a');
+    bg.addColorStop(0.58, '#101216');
+    bg.addColorStop(1, '#030406');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+    ctx.clip();
+    const medium = ctx.createRadialGradient(cx - rad * 0.2, cy - rad * 0.25, rad * 0.1, cx, cy, rad);
+    medium.addColorStop(0, '#bfc7b7');
+    medium.addColorStop(0.62, '#9fae9f');
+    medium.addColorStop(1, '#76877e');
+    ctx.fillStyle = medium;
+    ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+    ctx.restore();
+
+    ctx = this.prepareCache(this.topCache, w, h);
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.strokeStyle = 'rgba(255,255,255,.55)';
+    ctx.lineWidth = Math.max(2, rad * 0.025);
+    ctx.beginPath();
+    ctx.arc(cx, cy, rad + ctx.lineWidth * 0.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(121,215,255,.18)';
+    ctx.lineWidth = Math.max(1, rad * 0.05);
+    ctx.beginPath();
+    ctx.arc(cx - rad * 0.03, cy - rad * 0.02, rad * 0.96, -0.6, 2.7);
+    ctx.stroke();
+    ctx.restore();
+    this.renderLens(ctx, w, h);
   };
 
   PetriRenderer.prototype.screenToGrid = function (clientX, clientY) {
@@ -54,94 +117,61 @@
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
     ctx.clearRect(0, 0, w, h);
     const cx = w / 2, cy = h / 2, rad = this.cell * 69.5;
-
-    const bg = ctx.createRadialGradient(cx, cy, rad * 0.2, cx, cy, Math.max(w, h) * 0.65);
-    bg.addColorStop(0, '#27303a');
-    bg.addColorStop(0.58, '#101216');
-    bg.addColorStop(1, '#030406');
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(this.baseCache, 0, 0, w, h);
 
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, rad, 0, Math.PI * 2);
     ctx.clip();
-    const medium = ctx.createRadialGradient(cx - rad * 0.2, cy - rad * 0.25, rad * 0.1, cx, cy, rad);
-    medium.addColorStop(0, '#bfc7b7');
-    medium.addColorStop(0.62, '#9fae9f');
-    medium.addColorStop(1, '#76877e');
-    ctx.fillStyle = medium;
-    ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
 
     this.renderBubbles(ctx, w, h, rad, dt);
     this.renderCells(ctx, game);
     ctx.restore();
 
-    ctx.save();
-    ctx.globalCompositeOperation = 'screen';
-    ctx.strokeStyle = 'rgba(255,255,255,.55)';
-    ctx.lineWidth = Math.max(2, rad * 0.025);
-    ctx.beginPath();
-    ctx.arc(cx, cy, rad + ctx.lineWidth * 0.5, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(121,215,255,.18)';
-    ctx.lineWidth = Math.max(1, rad * 0.05);
-    ctx.beginPath();
-    ctx.arc(cx - rad * 0.03, cy - rad * 0.02, rad * 0.96, -0.6, 2.7);
-    ctx.stroke();
-    ctx.restore();
-
+    ctx.drawImage(this.topCache, 0, 0, w, h);
     this.renderMarkers(ctx, dt);
-    this.renderLens(ctx, w, h);
     this.renderStamp(ctx, w, h, dt);
   };
 
-  PetriRenderer.prototype.renderCells = function (ctx, game) {
-    const cells = game.cells, decay = game.decay;
+  PetriRenderer.prototype.rebuildCells = function (game) {
+    const data = this.cellImage.data;
+    const cells = game.cells, decay = game.decay, mask = game.mask;
     const sp = PetriGame.SPECIES;
+    for (let i = 0, p = 0; i < cells.length; i++, p += 4) {
+      const v = cells[i];
+      if (v > 0 && v !== PetriGame.WALL) {
+        const hex = sp[v].color;
+        data[p] = parseInt(hex.slice(1, 3), 16);
+        data[p + 1] = parseInt(hex.slice(3, 5), 16);
+        data[p + 2] = parseInt(hex.slice(5, 7), 16);
+        data[p + 3] = 255;
+      } else if (v === PetriGame.WALL) {
+        data[p] = 30; data[p + 1] = 26; data[p + 2] = 22; data[p + 3] = 230;
+      } else if (decay[i]) {
+        data[p] = 42; data[p + 1] = 78; data[p + 2] = 68; data[p + 3] = decay[i] * 18;
+      } else {
+        data[p] = 0; data[p + 1] = 0; data[p + 2] = 0; data[p + 3] = mask[i] ? 0 : 0;
+      }
+    }
+    this.cellCtx.putImageData(this.cellImage, 0, 0);
+    const gctx = this.glowSmall.getContext('2d');
+    gctx.clearRect(0, 0, 72, 72);
+    gctx.imageSmoothingEnabled = true;
+    gctx.drawImage(this.cellCanvas, 0, 0, 72, 72);
+    this.lastCellGeneration = game.generation;
+  };
+
+  PetriRenderer.prototype.renderCells = function (ctx, game) {
+    if (this.lastCellGeneration !== game.generation) this.rebuildCells(game);
     const c = this.cell, ox = this.offsetX, oy = this.offsetY;
     ctx.save();
+    ctx.imageSmoothingEnabled = false;
     ctx.globalCompositeOperation = 'source-over';
-    ctx.shadowBlur = 0;
-    for (let y = 0; y < 144; y++) {
-      for (let x = 0; x < 144; x++) {
-        const idx = y * 144 + x;
-        const v = cells[idx];
-        if (v > 0 && v !== PetriGame.WALL) {
-          ctx.fillStyle = sp[v].color;
-          ctx.globalAlpha = 1;
-          const px = ox + x * c;
-          const py = oy + y * c;
-          const s = Math.max(1.8, c * 0.94);
-          ctx.fillRect(px + (c - s) * 0.5, py + (c - s) * 0.5, s, s);
-        } else if (v === PetriGame.WALL) {
-          ctx.fillStyle = 'rgba(30,26,22,.82)';
-          ctx.shadowBlur = 0;
-          ctx.globalAlpha = 1;
-          ctx.fillRect(ox + x * c, oy + y * c, Math.max(1, c), Math.max(1, c));
-        } else if (decay[idx]) {
-          ctx.shadowBlur = 0;
-          ctx.fillStyle = 'rgba(50,85,72,' + (decay[idx] / 26) + ')';
-          ctx.fillRect(ox + x * c, oy + y * c, Math.max(1, c * 0.8), Math.max(1, c * 0.8));
-        }
-      }
-    }
+    ctx.drawImage(this.cellCanvas, ox, oy, c * 144, c * 144);
     ctx.globalCompositeOperation = 'lighter';
-    for (let y = 0; y < 144; y++) {
-      for (let x = 0; x < 144; x++) {
-        const idx = y * 144 + x;
-        const v = cells[idx];
-        if (v > 0 && v !== PetriGame.WALL) {
-          ctx.fillStyle = sp[v].color;
-          ctx.shadowColor = sp[v].color;
-          ctx.shadowBlur = c * 3.2;
-          ctx.globalAlpha = 0.34;
-          ctx.beginPath();
-          ctx.arc(ox + (x + 0.5) * c, oy + (y + 0.5) * c, Math.max(1.2, c * 0.72), 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.globalAlpha = 0.42 + Math.sin(Date.now() * 0.003) * 0.04;
+    ctx.drawImage(this.glowSmall, ox - c * 3, oy - c * 3, c * 150, c * 150);
     ctx.restore();
   };
 
