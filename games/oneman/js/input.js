@@ -19,6 +19,7 @@
       else if (e.key === '`' && self.hooks.debug) self.hooks.debug();
     });
     if (!this.leverEl) return;
+    document.getElementById('view').addEventListener('pointerdown', function () { if (self.hooks.start) self.hooks.start(); });
     function setFromPointer(ev) {
       const rect = self.leverEl.getBoundingClientRect();
       const y = (ev.clientY - rect.top) / Math.max(1, rect.height);

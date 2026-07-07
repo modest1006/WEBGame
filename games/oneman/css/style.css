@@ -42,6 +42,10 @@ button { font: inherit; }
 #result.show { opacity: 1; transform: translate(-50%, 0); }
 #result h2 { margin: 0 0 6px; font-size: 44px; }
 #result p { margin: 0; font-size: 24px; }
+#route-intro { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -44%) scale(.98); opacity: 0; visibility: hidden; min-width: min(760px, 86vw); padding: 28px 34px; text-align: center; background: rgba(0,0,0,.78); border-top: 3px solid #fff; border-bottom: 3px solid #fff; transition: opacity .22s, transform .22s, visibility .22s; }
+#route-intro.show { opacity: 1; visibility: visible; transform: translate(-50%, -50%) scale(1); }
+#route-intro h2 { margin: 0 0 18px; font-size: clamp(26px, 5vw, 52px); }
+#route-map { margin: 0; color: #ffcf72; font-weight: 900; letter-spacing: 1px; }
 
 #title-panel { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; background: linear-gradient(90deg, rgba(0,0,0,.72), rgba(0,0,0,.28)); transition: opacity .2s, visibility .2s; }
 body:not(.title) #title-panel { opacity: 0; visibility: hidden; pointer-events: none; }
@@ -55,6 +59,9 @@ body:not(.title) #title-panel { opacity: 0; visibility: hidden; pointer-events: 
 #mini-debug button { height: 24px; border: 1px solid #aaa; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; }
 #transition { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
 #transition.fade { background: #000; }
+#transition.fade:after { content: ""; position: absolute; left: -30%; top: 50%; width: 40%; height: 4px; background: #fff; opacity: .9; transform: translateY(-50%); animation: station-line .35s ease-out; }
+#transition.fade.warning:before { content: "運転再開"; position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); color: #fff; font-weight: 900; letter-spacing: 6px; }
+@keyframes station-line { from { left: -35%; } to { left: 100%; } }
 #transition.swish { background: linear-gradient(90deg, transparent, rgba(255,255,255,.85), transparent); transform: skewX(-18deg) translateX(0); }
 #transition.show.swish { animation: swish .4s ease-out; }
 @keyframes swish { from { transform: skewX(-18deg) translateX(-110%); } to { transform: skewX(-18deg) translateX(110%); } }

@@ -19,7 +19,10 @@
     result: $('result'),
     resultTitle: $('result-title'),
     resultBody: $('result-body'),
-    overlay: $('transition')
+    overlay: $('transition'),
+    routeIntro: $('route-intro'),
+    routeMap: $('route-map'),
+    topLedText: document.querySelector('#top-led span')
   };
   const renderer = new OneManRenderer($('view'), hud);
   const audio = new OneManAudio();
@@ -31,6 +34,7 @@
   });
   function startOrContinue() {
     if (game.phase === OneManGame.Phase.TITLE || game.phase === OneManGame.Phase.FINAL_RESULT) game.start();
+    else if (game.phase === OneManGame.Phase.RUN_INTRO || game.phase === OneManGame.Phase.DEPART || game.phase === OneManGame.Phase.CRUISE) game.skipCruise();
   }
   function syncShellState() {
     document.body.classList.toggle('title', game.phase === OneManGame.Phase.TITLE);

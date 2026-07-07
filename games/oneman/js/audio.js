@@ -39,6 +39,7 @@
     if (type === 'brakeRelease') this.noise(0.18, 0.04);
     if (type === 'jerkStop') this.beep(82, 0.18, 'square', 0.08);
     if (type === 'stop') this.beep(180, 0.08, 'triangle', 0.04);
+    if (type === 'approach') { this.beep(880, 0.08, 'square', 0.04); this.beep(660, 0.12, 'square', 0.04); }
   };
   window.OneManAudio = OneManAudio;
 })();

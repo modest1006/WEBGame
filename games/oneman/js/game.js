@@ -17,11 +17,17 @@
     PAUSE: 'PAUSE'
   };
 
-  const Shot = { COCKPIT: 'COCKPIT', SIDE_STOP: 'SIDE_STOP' };
+  const Shot = { COCKPIT: 'COCKPIT', SIDE_STOP: 'SIDE_STOP', CINE_SIDE: 'CINE_SIDE', CINE_FRONT: 'CINE_FRONT', CINE_AERIAL: 'CINE_AERIAL', CINE_TAIL: 'CINE_TAIL', PLATFORM: 'PLATFORM' };
   const STEP_MS = 16.6667;
   const BRAKE_TAU = 0.6;
   const NOTCHES = ['N', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'EB'];
   const DECEL = [0, 0.25, 0.32, 0.42, 0.54, 0.68, 0.84, 0.98, 1.10, 1.60];
+  const ROUTE = [
+    { name: 'たばがわ', kanji: '田場川', theme: '田園', length: 920 },
+    { name: 'こもれび台', kanji: '木漏台', theme: '住宅地', length: 1040 },
+    { name: 'みやま口', kanji: '深山口', theme: '山間', length: 1120 },
+    { name: 'うみかぜ浜', kanji: '海風浜', theme: '海沿い', length: 980 }
+  ];
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
   function makeRng(seed) {
@@ -71,6 +77,7 @@
   OneManGame.DECEL = DECEL;
   OneManGame.STEP_MS = STEP_MS;
   OneManGame.conditionFor = conditionFor;
+  OneManGame.ROUTE = ROUTE;
 
   OneManGame.prototype.on = function (fn) { this.listeners.push(fn || eventSink); };
   OneManGame.prototype.emit = function (type, data) {
@@ -82,6 +89,8 @@
     this.shot = Shot.COCKPIT;
     this.condition = conditionFor(this.seed, this.runSerial);
     this.startDist = this.condition.startDist;
+    this.sectionLength = ROUTE[0].length;
+    this.routePos = this.sectionLength - this.startDist;
     this.dist = this.startDist;
     this.x = 0;
     this.v = this.condition.startKmh / 3.6;
@@ -96,6 +105,10 @@
     this.result = null;
     this.stationScores = [];
     this.stationIndex = 0;
+    this.cruiseDurationMs = 14000;
+    this.cineShots = [];
+    this.cineShotIndex = 0;
+    this.cineShotMs = 0;
     this.timeMs = 0;
     this.phaseTimeMs = 0;
     this.transition = { type: 'fade', t: 1, duration: 0.35 };
@@ -103,8 +116,45 @@
     this.creepTarget = null;
   };
   OneManGame.prototype.start = function () {
-    this.resetRun();
-    this.setPhase(Phase.APPROACH);
+    this.reset();
+    this.stationIndex = 0;
+    this.stationScores = [];
+    this.prepareSection(0, true);
+    this.setPhase(Phase.RUN_INTRO);
+  };
+  OneManGame.prototype.prepareSection = function (index, keepScores) {
+    this.stationIndex = clamp(index, 0, ROUTE.length - 1);
+    this.condition = conditionFor(this.seed, this.stationIndex + 1);
+    this.sectionLength = ROUTE[this.stationIndex].length;
+    this.startDist = this.condition.startDist;
+    this.dist = this.sectionLength;
+    this.routePos = 0;
+    this.x = 0;
+    this.v = 0;
+    this.commandNotch = 0;
+    this.effectiveBrake = 0;
+    this.notchMoves = 0;
+    this.usedEb = false;
+    this.usedCreep = false;
+    this.jerkStop = false;
+    this.lastStopDecel = 0;
+    this.firstStopError = null;
+    this.result = null;
+    this.dimensionFlash = 0;
+    if (!keepScores) this.stationScores = [];
+    this.makeCinePlan();
+  };
+  OneManGame.prototype.makeCinePlan = function () {
+    const rnd = makeRng(this.seed + 1000 + this.stationIndex * 97);
+    const shots = [Shot.CINE_SIDE, Shot.CINE_FRONT, Shot.CINE_AERIAL, Shot.CINE_TAIL];
+    for (let i = shots.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      const t = shots[i]; shots[i] = shots[j]; shots[j] = t;
+    }
+    this.cineShots = shots.map(function (shot) { return { shot: shot, durationMs: 4000 + Math.floor(rnd() * 3000) }; });
+    this.cineShotIndex = 0;
+    this.cineShotMs = 0;
+    this.cruiseDurationMs = this.cineShots.reduce(function (a, s) { return a + s.durationMs; }, 0);
   };
   OneManGame.prototype.resetRun = function (condition) {
     if (!condition) {
@@ -116,7 +166,9 @@
     this.shot = Shot.COCKPIT;
     this.condition = condition;
     this.startDist = condition.startDist;
+    this.sectionLength = ROUTE[this.stationIndex] ? ROUTE[this.stationIndex].length : 980;
     this.dist = this.startDist;
+    this.routePos = this.sectionLength - this.dist;
     this.x = 0;
     this.v = condition.startKmh / 3.6;
     this.commandNotch = 0;
@@ -128,7 +180,6 @@
     this.lastStopDecel = 0;
     this.firstStopError = null;
     this.result = null;
-    this.stationScores = [];
     this.timeMs = 0;
     this.phaseTimeMs = 0;
     this.dimensionFlash = 0;
@@ -143,6 +194,17 @@
     if (phase === Phase.FINAL) {
       this.shot = Shot.SIDE_STOP;
       this.transition = { type: 'swish', t: 0, duration: 0.4 };
+    } else if (phase === Phase.CRUISE) {
+      this.shot = this.cineShots[0] ? this.cineShots[0].shot : Shot.CINE_SIDE;
+      this.cineShotIndex = 0;
+      this.cineShotMs = 0;
+      if (old !== null) this.transition = { type: 'fade', t: 0, duration: 0.35 };
+    } else if (phase === Phase.DEPART || phase === Phase.APPROACH) {
+      this.shot = Shot.COCKPIT;
+      if (old !== null) this.transition = { type: 'fade', t: 0, duration: 0.35, warning: old === Phase.CRUISE && phase === Phase.APPROACH };
+    } else if (phase === Phase.STATION_RESULT || phase === Phase.DOORS || phase === Phase.FINAL_RESULT) {
+      this.shot = Shot.PLATFORM;
+      if (old !== null) this.transition = { type: 'fade', t: 0, duration: 0.35 };
     } else if (old !== null && old !== phase) {
       this.transition = { type: 'fade', t: 0, duration: 0.35 };
     }
@@ -174,12 +236,44 @@
     this.phaseTimeMs += dt * 1000;
     this.dimensionFlash = Math.max(0, this.dimensionFlash - dt);
     if (this.transition && this.transition.t < 1) this.transition.t = Math.min(1, this.transition.t + dt / this.transition.duration);
+    if (this.phase === Phase.RUN_INTRO) {
+      if (this.phaseTimeMs > 3000) this.setPhase(Phase.DEPART);
+      return;
+    }
+    if (this.phase === Phase.DEPART) {
+      this.v = Math.min(75 / 3.6, this.v + 0.82 * dt);
+      this.routePos = Math.min(this.sectionLength - this.condition.startDist - 160, this.routePos + this.v * dt);
+      this.dist = this.sectionLength - this.routePos;
+      if (this.phaseTimeMs > 4200) this.setPhase(Phase.CRUISE);
+      return;
+    }
+    if (this.phase === Phase.CRUISE) {
+      this.v += ((75 / 3.6) - this.v) * Math.min(1, dt * 1.5);
+      this.routePos = Math.min(this.sectionLength - this.condition.startDist, this.routePos + this.v * dt);
+      this.dist = this.sectionLength - this.routePos;
+      this.cineShotMs += dt * 1000;
+      const current = this.cineShots[this.cineShotIndex];
+      if (current && this.cineShotMs >= current.durationMs) {
+        this.cineShotMs = 0;
+        this.cineShotIndex = (this.cineShotIndex + 1) % this.cineShots.length;
+        this.shot = this.cineShots[this.cineShotIndex].shot;
+      }
+      if (this.phaseTimeMs >= this.cruiseDurationMs || this.routePos >= this.sectionLength - this.condition.startDist) this.enterApproach();
+      return;
+    }
     if (this.phase === Phase.STOPPED || this.phase === Phase.OVERRUN) {
       if (this.phaseTimeMs > 1200) this.setPhase(Phase.STATION_RESULT);
       return;
     }
-    if (this.phase === Phase.TITLE || this.phase === Phase.STATION_RESULT || this.phase === Phase.FINAL_RESULT) {
-      if (this.phase === Phase.STATION_RESULT && this.phaseTimeMs > 4000) this.setPhase(Phase.FINAL_RESULT);
+    if (this.phase === Phase.TITLE || this.phase === Phase.STATION_RESULT || this.phase === Phase.DOORS || this.phase === Phase.FINAL_RESULT) {
+      if (this.phase === Phase.STATION_RESULT && this.phaseTimeMs > 4000) this.setPhase(Phase.DOORS);
+      if (this.phase === Phase.DOORS && this.phaseTimeMs > 3200) {
+        if (this.stationIndex >= ROUTE.length - 1) this.setPhase(Phase.FINAL_RESULT);
+        else {
+          this.prepareSection(this.stationIndex + 1, true);
+          this.setPhase(Phase.DEPART);
+        }
+      }
       if (this.phase === Phase.FINAL_RESULT && this.phaseTimeMs > 6000) this.setPhase(Phase.TITLE);
       return;
     }
@@ -189,6 +283,7 @@
       this.v = 0.85;
       this.x += this.v * dt;
       this.dist = this.startDist - this.x;
+      this.routePos = this.sectionLength - this.dist;
       if (this.dist <= 0.04) {
         this.v = 0;
         this.setPhase(Phase.STOPPED);
@@ -205,6 +300,7 @@
     const avgV = (oldV + newV) * 0.5;
     this.x += avgV * dt;
     this.dist = this.startDist - this.x;
+    this.routePos = this.sectionLength - this.dist;
     this.v = newV;
     if (this.dist <= 15 && this.v < 25 / 3.6 && this.phase === Phase.APPROACH) this.setPhase(Phase.FINAL);
     if (this.dist < -10 && this.phase !== Phase.OVERRUN) {
@@ -226,6 +322,24 @@
       }
     }
   };
+  OneManGame.prototype.enterApproach = function () {
+    this.resetRun(this.condition);
+    this.dist = this.condition.startDist;
+    this.startDist = this.condition.startDist;
+    this.x = 0;
+    this.routePos = this.sectionLength - this.dist;
+    this.v = this.condition.startKmh / 3.6;
+    this.setPhase(Phase.APPROACH);
+    this.emit('approach', { station: this.stationIndex, condition: this.condition });
+  };
+  OneManGame.prototype.skipCruise = function () {
+    if (this.phase === Phase.RUN_INTRO) {
+      this.setPhase(Phase.DEPART);
+    } else if (this.phase === Phase.CRUISE || this.phase === Phase.DEPART) {
+      this.enterApproach();
+    }
+    return this.getState();
+  };
   OneManGame.prototype.finishByPhysics = function (phase) {
     const error = this.usedCreep && this.firstStopError !== null ? this.firstStopError : -this.dist;
     const r = scoreStation(error, {
@@ -236,7 +350,7 @@
       moves: this.notchMoves
     });
     this.result = r;
-    this.stationScores = [r];
+    this.stationScores[this.stationIndex] = r;
     this.dimensionFlash = 1.6;
     this.emit(this.jerkStop ? 'jerkStop' : 'stop', r);
   };
@@ -278,6 +392,10 @@
       error: -this.dist,
       score: this.result ? this.result.score : 0,
       stationIndex: this.stationIndex,
+      stationCount: ROUTE.length,
+      station: ROUTE[this.stationIndex],
+      routePos: this.routePos,
+      sectionLength: this.sectionLength,
       shot: this.shot,
       gradePermille: gradeAt(this.dist, this.condition),
       condition: {
@@ -294,6 +412,9 @@
       moves: this.notchMoves,
       result: this.result,
       finalResult: this.resultSummary(),
+      stationScores: this.stationScores.slice(),
+      cineShotIndex: this.cineShotIndex,
+      cineShotMs: this.cineShotMs,
       transition: this.transition,
       dimensionFlash: this.dimensionFlash
     };
@@ -376,12 +497,12 @@
   };
   OneManGame.prototype.sampleConditions = function (count) {
     const arr = [];
-    for (let i = 1; i <= (count || 10); i++) arr.push(conditionFor(this.seed, i));
+    for (let i = 1; i <= (count || ROUTE.length); i++) arr.push(conditionFor(this.seed, i));
     return arr;
   };
   OneManGame.prototype.constantDistribution = function (count) {
     const self = this;
-    return this.sampleConditions(count || 10).map(function (condition) {
+    return this.sampleConditions(count || ROUTE.length).map(function (condition) {
       const best = self.bestConstantFor(condition);
       return {
         condition: condition,
@@ -395,7 +516,7 @@
     });
   };
   OneManGame.prototype.validate = function () {
-    const samples = this.sampleConditions(10);
+    const samples = this.sampleConditions(ROUTE.length);
     const rows = [];
     let ok = true;
     for (let i = 0; i < samples.length; i++) {
@@ -423,7 +544,31 @@
         twoStepOk: twoOk
       });
     }
-    return { ok: ok, scenario: '10 seeded conditions: B1 overruns, EB stops short, two-step reaches +/-30cm', samples: rows };
+    return { ok: ok, scenario: '4 route sections: B1 overruns, EB stops short, two-step reaches +/-30cm', samples: rows };
+  };
+  OneManGame.prototype.autoPlayRoute = function () {
+    this.start();
+    const log = [];
+    let guard = 0;
+    while (this.phase !== Phase.FINAL_RESULT && guard < 1200000) {
+      if (this.phase === Phase.RUN_INTRO || this.phase === Phase.DEPART || this.phase === Phase.CRUISE) this.skipCruise();
+      if (this.phase === Phase.APPROACH || this.phase === Phase.FINAL) {
+        const best = this.bestTwoStepFor(this.condition, this.bestConstantFor(this.condition).notch);
+        this.brake(best.first);
+        let local = 0;
+        while ((this.phase === Phase.APPROACH || this.phase === Phase.FINAL) && local < 160000) {
+          if (local >= best.switchMs) this.brake(best.second);
+          this.step(STEP_MS);
+          local += STEP_MS;
+          guard += STEP_MS;
+        }
+        log.push({ section: this.stationIndex + 1, condition: this.condition, plan: best, result: this.result });
+      } else {
+        this.step(STEP_MS);
+        guard += STEP_MS;
+      }
+    }
+    return { ok: this.phase === Phase.FINAL_RESULT, phase: this.phase, total: this.resultSummary().total, title: this.resultSummary().title, log: log, state: this.getState() };
   };
 
   window.OneManGame = OneManGame;

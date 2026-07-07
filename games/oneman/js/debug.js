@@ -27,11 +27,13 @@
       setSpeed: game.setSpeed.bind(game),
       setDist: game.setDist.bind(game),
       skipTo: game.skipTo.bind(game),
+      skipCruise: game.skipCruise.bind(game),
       finishStation: game.finishStation.bind(game),
       result: game.resultSummary.bind(game),
       validate: game.validate.bind(game),
       simulatePattern: game.simulatePattern.bind(game),
-      constantDistribution: game.constantDistribution.bind(game)
+      constantDistribution: game.constantDistribution.bind(game),
+      autoPlayRoute: game.autoPlayRoute.bind(game)
     };
     sync();
     return { toggle: function () { visible = !visible; sync(); update(); }, update: update };
