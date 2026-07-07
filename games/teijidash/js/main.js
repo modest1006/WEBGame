@@ -24,19 +24,16 @@ function syncHud() {
   $('score').textContent = Math.floor(s.score).toLocaleString('en-US');
   $('best').textContent = Math.floor(game.best).toLocaleString('en-US');
   $('prep-bar').style.width = s.prep + '%';
-  $('meter-label').textContent = game.act === ACT.DASH ? `疾走 ${s.runX}m / Combo ${s.combo}` : game.act === ACT.JUST ? `定時まで ${fmtMs(Math.max(0, -s.clockMs))}` : `帰り支度 ${s.prep}%`;
-  judgeEl.textContent = game.flashMs > 0 ? game.flashText : '';
+  if (game.act === ACT.DASH) $('meter-label').textContent = `疾走 ${s.runX}m / Combo ${s.combo} / ${s.judge || '-'}`;
+  else if (game.act === ACT.JUST || game.act === ACT.JUST_SLOW) $('meter-label').textContent = `打刻 ${s.stamp || fmtMs(Math.max(0, -s.clockMs))}`;
+  else if (game.act === ACT.DAY_RESULT) $('meter-label').textContent = s.resultLocked ? 'タイムカード打刻中...' : '押すと次へ';
+  else $('meter-label').textContent = `帰り支度 ${s.prep}%`;
+  judgeEl.textContent = game.flashMs > 0 && game.act !== ACT.DAY_RESULT && game.act !== ACT.INTERLUDE && game.act !== ACT.JUST_SLOW ? game.flashText : '';
 }
 
 function syncOverlay() {
   if (game.act === ACT.TITLE) {
     showOverlay('定時ダッシュ', 'Space、クリック、タップで開始');
-  } else if (game.act === ACT.DAY_RESULT && game.dayResult) {
-    const r = game.dayResult;
-    showOverlay(`${DAY_JP[r.day]}曜 ${r.rank}`, `Score ${r.score.toLocaleString('en-US')}<br>支度 ${r.prep}% / ${r.judge} ${r.offset}ms<br>押すと次の日へ`);
-  } else if (game.act === ACT.WEEK_RESULT) {
-    const r = game.result();
-    showOverlay(`今週の称号<br>${r.title}`, `週間 ${r.weekScore.toLocaleString('en-US')} / BEST ${r.best.toLocaleString('en-US')}<br>今週の残業時間 ${r.overtime}<br>押すと再挑戦`);
   } else if (game.paused) {
     showOverlay('PAUSE', 'Pで再開');
   } else {
@@ -47,7 +44,7 @@ function syncOverlay() {
 game.on((type, data) => {
   renderer.handleEvent(type, data, game);
   music.event(type, data);
-  if (type === 'dayResult' || type === 'weekResult' || type === 'start' || type === 'act') syncOverlay();
+  if (type === 'dayResult' || type === 'weekResult' || type === 'start' || type === 'act' || type === 'interlude') syncOverlay();
 });
 
 const actions = {
@@ -84,7 +81,7 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-// ヘッドレス検証用: rAFが止まる非表示環境でも1フレーム描画できる手動ポンプ
+// Headless verification hook: lets tests pump one frame when rAF is unavailable or hidden.
 window.__renderOnce = (dt = 16.7) => {
   try {
     renderer.render(game, dt);

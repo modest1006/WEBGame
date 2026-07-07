@@ -20,16 +20,16 @@ class TeijiDashGame {
     this.weekScore = 0;
     this.weekResults = [];
     this.paused = false;
-    this.startDay();
+    this.initDay();
     this.act = ACT.TITLE;
   }
 
-  startDay() {
-    this.act = ACT.PREP;
+  initDay() {
     this.time = 0;
     this.dayScore = 0;
     this.prep = 0;
     this.prepStage = 0;
+    this.prepAnim = { stage: 0, age: 9999, serial: 0 };
     this.inputDown = false;
     this.bossLooking = false;
     this.bossForced = null;
@@ -41,6 +41,7 @@ class TeijiDashGame {
     this.justOffset = null;
     this.justSlow = 0;
     this.justClockMs = -10000;
+    this.justStamp = '';
     this.runX = 0;
     this.speed = 0;
     this.combo = 0;
@@ -48,23 +49,47 @@ class TeijiDashGame {
     this.hits = 0;
     this.qtes = [];
     this.nextQteX = 700;
-    this.directorHits = 0;
+    this.directorSpawned = false;
     this.flashText = '';
     this.flashMs = 0;
     this.dayResult = null;
+    this.resultLines = 0;
     this.scheduleBoss();
     this.emit('dayStart', { day: this.day });
   }
 
   start() {
     this.resetWeek();
-    this.act = ACT.PREP;
+    this.enterInterlude(ACT.PREP);
     this.emit('start');
+  }
+
+  enterInterlude(targetAct) {
+    this.act = ACT.INTERLUDE;
+    this.time = 0;
+    this.interludeTarget = targetAct;
+    this.inputDown = false;
+    this.say(ACT_TITLES[targetAct] || '', TUNING.interludeMs);
+    this.emit('interlude', { target: targetAct, title: ACT_TITLES[targetAct] || '' });
+  }
+
+  completeInterlude() {
+    const target = this.interludeTarget;
+    if (target === ACT.PREP) this.enterPrep();
+    else if (target === ACT.JUST) this.enterJust();
+    else if (target === ACT.DASH) this.enterDash();
+  }
+
+  enterPrep() {
+    this.act = ACT.PREP;
+    this.time = 0;
+    this.inputDown = false;
+    this.emit('act', { act: this.act });
   }
 
   scheduleBoss() {
     const level = this.day;
-    this.bossTimer = this.rng.range(1100 - level * 80, 2300 - level * 120);
+    this.bossTimer = this.rng.range(1200 - level * 70, 2500 - level * 120);
     this.bossWarn = 0;
   }
 
@@ -81,10 +106,13 @@ class TeijiDashGame {
   tick(dt) {
     this.time += dt;
     this.flashMs = Math.max(0, this.flashMs - dt);
-    if (this.act === ACT.PREP) this.tickPrep(dt);
+    this.prepAnim.age += dt;
+    if (this.act === ACT.INTERLUDE && this.time >= TUNING.interludeMs) this.completeInterlude();
+    else if (this.act === ACT.PREP) this.tickPrep(dt);
     else if (this.act === ACT.JUST) this.tickJust(dt);
+    else if (this.act === ACT.JUST_SLOW) this.tickJustSlow(dt);
     else if (this.act === ACT.DASH) this.tickDash(dt);
-    else if (this.act === ACT.DAY_RESULT && this.time >= TUNING.resultMs) this.nextDay();
+    else if (this.act === ACT.DAY_RESULT) this.resultLines = clamp(Math.floor((this.time - 900) / 420), 0, 4);
   }
 
   tickPrep(dt) {
@@ -97,7 +125,7 @@ class TeijiDashGame {
         this.bossWarn -= dt;
         if (this.bossWarn <= 0) {
           this.bossLooking = true;
-          this.bossTimer = this.rng.range(620, 1050 + this.day * 90);
+          this.bossTimer = this.rng.range(720, 1150 + this.day * 90);
           this.emit('bossLook', { on: true });
         }
       } else if (this.bossLooking && this.bossTimer <= 0) {
@@ -115,18 +143,19 @@ class TeijiDashGame {
         this.prep = clamp(this.prep - TUNING.prepPenalty, 0, 100);
         this.time += TUNING.caughtPenaltyMs;
         this.caught++;
-        this.say('発見!! 仕事追加!', 1300);
+        this.say('発見!!', 900);
         this.emit('caught', { prep: this.prep });
       } else {
         const oldStage = this.prepStage;
         this.prep = clamp(this.prep + TUNING.prepRate * dt, 0, 100);
         this.prepStage = clamp(Math.floor(this.prep / 25), 0, 3);
-        if (oldStage !== this.prepStage || this.rng.next() < 0.035) {
-          this.emit('prepAction', { stage: this.prepStage, prep: this.prep });
+        if (oldStage !== this.prepStage || this.prepAnim.age > 420) {
+          this.prepAnim = { stage: this.prepStage, age: 0, serial: this.prepAnim.serial + 1 };
+          this.emit('prepAction', { stage: this.prepStage, prep: this.prep, serial: this.prepAnim.serial });
         }
       }
     }
-    if (this.prep >= 100 || this.time >= TUNING.prepMs) this.enterJust();
+    if (this.prep >= 100 || this.time >= TUNING.prepMs) this.enterInterlude(ACT.JUST);
   }
 
   enterJust() {
@@ -137,11 +166,12 @@ class TeijiDashGame {
     this.justPresses = 0;
     this.justJudge = null;
     this.justOffset = null;
+    this.justStamp = '';
     this.say('17:59:50', 900);
     this.emit('act', { act: this.act });
   }
 
-  tickJust(dt) {
+  tickJust() {
     this.justClockMs = -10000 + this.time;
     if (this.time >= TUNING.justMs && !this.justJudge) this.resolveJust(5000);
   }
@@ -155,7 +185,7 @@ class TeijiDashGame {
       this.emit('flying');
       return;
     }
-    let abs = Math.abs(offset);
+    const abs = Math.abs(offset);
     let judge = 'LATE';
     if (offset < -300) judge = 'GOOD';
     else if (abs <= 50) judge = 'PERFECT';
@@ -163,11 +193,18 @@ class TeijiDashGame {
     else if (abs <= 300) judge = 'GOOD';
     this.justOffset = Math.round(offset);
     this.justJudge = judge;
-    const slow = judge === 'PERFECT' ? 1900 : judge === 'GREAT' ? 1350 : 900;
-    this.justSlow = slow;
-    this.say(judge === 'PERFECT' ? '音速定時!!' : judge, slow);
-    this.emit('just', { judge, offset: this.justOffset, slow });
-    this.enterDash();
+    this.justSlow = judge === 'PERFECT' ? 2500 : judge === 'GREAT' ? 2000 : judge === 'GOOD' ? 1600 : 1400;
+    this.justStamp = fmtStamp(this.justOffset);
+    this.act = ACT.JUST_SLOW;
+    this.time = 0;
+    this.inputDown = false;
+    this.say(judge === 'PERFECT' ? '音速定時!!' : judge, this.justSlow + 900);
+    this.emit('just', { judge, offset: this.justOffset, slow: this.justSlow, stamp: this.justStamp });
+  }
+
+  tickJustSlow() {
+    const total = TUNING.justFlashMs + TUNING.justFreezeMs + this.justSlow;
+    if (this.time >= total) this.enterInterlude(ACT.DASH);
   }
 
   enterDash() {
@@ -181,14 +218,14 @@ class TeijiDashGame {
     this.hits = 0;
     this.qtes = [];
     this.nextQteX = 560 - this.day * 28;
-    this.directorHits = 0;
+    this.directorSpawned = false;
     this.emit('act', { act: this.act });
   }
 
   tickDash(dt) {
     const bind = this.qtes.some((q) => q.failedBind > 0);
     if (bind) this.speed = Math.max(90, this.speed - dt * 0.32);
-    else this.speed = lerp(this.speed, 620 + this.combo * 16, 0.008);
+    else this.speed = lerp(this.speed, 620 + this.combo * 18, 0.008);
     this.runX += this.speed * dt / 1000;
     for (const q of this.qtes) {
       q.age += dt;
@@ -196,7 +233,7 @@ class TeijiDashGame {
       q.failedBind = Math.max(0, q.failedBind - dt);
       if (!q.done && q.dist < -TUNING.qteWindowMs * this.speed / 1000) this.failQte(q);
     }
-    // 失敗QTEは拘束(failedBind)が切れるまで残す（即削除すると拘束減速が一切効かない）
+    // Keep failed QTEs while their bind animation is active; dropping them early skips slowdown feedback.
     this.qtes = this.qtes.filter((q) => q.failedBind > 0 || (!q.done && q.age < 3600));
     if (this.runX > this.nextQteX && this.runX < 4300) this.spawnQTE();
     const goal = this.day === 4 ? 5200 : 4700;
@@ -205,7 +242,8 @@ class TeijiDashGame {
 
   spawnQTE(type) {
     type = type || this.rng.pick(QTE_TYPES);
-    if (this.day === 4 && this.runX > 4050 && !this.qtes.some((q) => q.type === 'director')) type = 'director';
+    if (this.day === 4 && this.runX > 4000 && !this.directorSpawned) type = 'director';
+    if (type === 'director') this.directorSpawned = true;
     const q = {
       id: Math.floor(this.rng.next() * 1e9),
       type,
@@ -215,9 +253,12 @@ class TeijiDashGame {
       done: false,
       failedBind: 0,
       taps: type === 'director' ? 3 : 1,
+      variant: this.rng.int(0, 3),
+      pair: type === 'coworker' && this.rng.next() < 0.35,
+      wobble: this.rng.range(0, Math.PI * 2),
     };
     this.qtes.push(q);
-    this.nextQteX += this.rng.range(520 - this.day * 22, 770 - this.day * 26);
+    this.nextQteX += this.rng.range(560 - this.day * 20, 800 - this.day * 28);
     this.emit('qte', { qte: q });
     return q;
   }
@@ -226,7 +267,7 @@ class TeijiDashGame {
     const active = this.qtes.filter((q) => !q.done).sort((a, b) => Math.abs(a.dist) - Math.abs(b.dist))[0];
     if (!active) {
       this.combo = 0;
-      this.say('空振り!', 520);
+      this.say('空振り!', 420);
       this.emit('missPress');
       return false;
     }
@@ -246,28 +287,35 @@ class TeijiDashGame {
 
   successQte(q, msOff) {
     q.done = true;
+    q.successAge = 0;
     this.combo++;
     this.maxCombo = Math.max(this.maxCombo, this.combo);
-    this.speed += 95 + this.combo * 12;
-    this.say(q.type === 'coworker' ? 'お疲れ様でした!' : q.type === 'elevator' ? 'ヘッドスライディング!' : q.type === 'director' ? '部長突破!!' : 'ジャスト!', 760);
+    this.speed += 105 + this.combo * 14;
+    const text = q.type === 'coworker' ? 'お疲れ様でした!' : q.type === 'elevator' ? '滑り込み!' : q.type === 'director' ? '部長突破!!' : 'ジャスト!';
+    this.say(text, 720);
     this.emit('qteSuccess', { qte: q, combo: this.combo, offset: Math.round(msOff) });
   }
 
   failQte(q) {
     if (q.done) return;
     q.done = true;
-    q.failedBind = 1550;
+    q.failedBind = 1600;
     this.combo = 0;
     this.hits++;
     this.speed = Math.max(80, this.speed * 0.34);
-    this.say(q.type === 'coworker' ? 'まだ帰らないよね?' : '紙吹雪爆発!', 1000);
+    this.say(q.type === 'coworker' || q.type === 'director' ? 'まだ帰らないよね?' : '紙吹雪爆発!', 900);
     this.emit('qteFail', { qte: q, hits: this.hits });
   }
 
   press(down) {
     if (down === false) return this.release();
     if (this.act === ACT.TITLE || this.act === ACT.WEEK_RESULT) { this.start(); return; }
-    if (this.act === ACT.DAY_RESULT) { this.nextDay(); return; }
+    if (this.act === ACT.INTERLUDE || this.act === ACT.JUST_SLOW) return;
+    if (this.act === ACT.DAY_RESULT) {
+      if (this.time < TUNING.resultInputLockMs) return;
+      this.nextDay();
+      return;
+    }
     if (this.paused) return;
     if (this.act === ACT.PREP) this.inputDown = true;
     else if (this.act === ACT.JUST && !this.justJudge) this.resolveJust(this.justClockMs);
@@ -286,18 +334,20 @@ class TeijiDashGame {
 
   setAct(n) {
     n = Number(n);
-    if (n === 1) this.startDay();
+    if (n === 1) { this.initDay(); this.enterPrep(); }
     else if (n === 2) this.enterJust();
     else if (n === 3) this.enterDash();
-    else this.act = clamp(Math.floor(n), 0, 5);
+    else if (n === 4) this.act = ACT.JUST_SLOW;
+    else this.act = clamp(Math.floor(n), 0, 7);
     return this.act;
   }
 
-  setDay(n) { this.day = clamp(Math.floor(Number(n) || 0), 0, 4); this.startDay(); return this.day; }
+  setDay(n) { this.day = clamp(Math.floor(Number(n) || 0), 0, 4); this.initDay(); this.enterInterlude(ACT.PREP); return this.day; }
   setPrep(pct) { this.prep = clamp(Number(pct) || 0, 0, 100); this.prepStage = clamp(Math.floor(this.prep / 25), 0, 3); return this.prep; }
   bossLook(on) { this.bossForced = !!on; this.bossLooking = !!on; this.emit('bossLook', { on: this.bossLooking }); return this.bossLooking; }
 
   finishDay() {
+    if (this.act === ACT.DAY_RESULT || this.act === ACT.WEEK_RESULT) return;
     const precision = this.justJudge === 'PERFECT' ? 1.25 : this.justJudge === 'GREAT' ? 1.05 : this.justJudge === 'GOOD' ? 0.82 : 0.55;
     const latePenalty = this.justOffset > 0 ? Math.min(0.35, this.justOffset / 3000) : 0;
     const prepMul = 0.55 + this.prep / 100 * 0.75;
@@ -306,12 +356,13 @@ class TeijiDashGame {
     const rank = score >= 12000 ? 'S 音速定時' : score >= 9500 ? 'A' : score >= 7200 ? 'B' : score >= 4800 ? 'C' : 'D';
     this.dayScore = score;
     this.weekScore += score;
-    this.dayResult = { day: this.day, score, rank, prep: Math.round(this.prep), judge: this.justJudge, offset: this.justOffset, combo: this.maxCombo, hits: this.hits };
+    this.dayResult = { day: this.day, score, rank, prep: Math.round(this.prep), judge: this.justJudge, offset: this.justOffset || 0, stamp: this.justStamp || fmtStamp(this.justOffset || 0), combo: this.maxCombo, hits: this.hits };
     this.weekResults[this.day] = this.dayResult;
     this.act = ACT.DAY_RESULT;
     this.time = 0;
+    this.resultLines = 0;
     this.inputDown = false;
-    this.say(rank, 1800);
+    this.say(rank, 1600);
     this.emit('dayResult', this.dayResult);
   }
 
@@ -319,6 +370,7 @@ class TeijiDashGame {
     if (this.act !== ACT.DAY_RESULT) return;
     if (this.day >= 4) {
       this.act = ACT.WEEK_RESULT;
+      this.time = 0;
       if (this.weekScore > this.best) {
         this.best = this.weekScore;
         try { localStorage.setItem(BEST_KEY, String(this.best)); } catch (_) {}
@@ -327,7 +379,8 @@ class TeijiDashGame {
       return;
     }
     this.day++;
-    this.startDay();
+    this.initDay();
+    this.enterInterlude(ACT.PREP);
     this.emit('act', { act: this.act });
   }
 
@@ -342,22 +395,28 @@ class TeijiDashGame {
     return {
       act: ACT_NAMES[this.act] || this.act,
       actId: this.act,
+      interludeTarget: this.interludeTarget || null,
       day: this.day,
       dayName: DAYS[this.day],
       prep: Math.round(this.prep),
       prepStage: PREP_STAGES[this.prepStage],
+      prepAnim: { stage: this.prepAnim.stage, age: Math.round(this.prepAnim.age), serial: this.prepAnim.serial },
       bossLooking: this.bossLooking,
       bossWarnMs: Math.round(this.bossWarn),
       clockMs: Math.round(this.justClockMs),
-      score: this.weekScore + this.dayScore,
+      slowMs: this.act === ACT.JUST_SLOW ? Math.round(this.time) : 0,
+      slowTotalMs: this.justSlow,
+      score: this.weekScore + (this.act === ACT.DAY_RESULT || this.act === ACT.WEEK_RESULT ? 0 : this.dayScore),
       dayScore: this.dayScore,
       combo: this.combo,
       maxCombo: this.maxCombo,
       runX: Math.round(this.runX),
       speed: Math.round(this.speed),
-      qte: this.qtes.filter((q) => !q.done).map((q) => ({ type: q.type, dist: Math.round(q.dist), taps: q.taps })),
+      qte: this.qtes.filter((q) => !q.done).map((q) => ({ type: q.type, dist: Math.round(q.dist), taps: q.taps, variant: q.variant, pair: q.pair })),
       judge: this.justJudge,
       offset: this.justOffset,
+      stamp: this.justStamp,
+      resultLocked: this.act === ACT.DAY_RESULT && this.time < TUNING.resultInputLockMs,
       paused: this.paused,
     };
   }
