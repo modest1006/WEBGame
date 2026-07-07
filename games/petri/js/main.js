@@ -134,14 +134,15 @@
     showModal('るす中レポート', report.generations + '世代経過<br>最大人口 ' + report.maxPopulation + '<br>新種 ' + report.newDiscoveries + '種発見');
   }
 
-  if (params.get('autotest') === 'six') {
+  if (params.get('autotest') === 'six' || params.get('autotest') === 'nutrient') {
     game.addPoints(10000);
     for (let s = 1; s <= 6; s++) game.unlock(s);
     game.resetDish();
     [[46,46],[72,36],[98,48],[48,94],[74,104],[102,91]].forEach(function (p, i) {
       game.scatter(p[0], p[1], i + 1, 13, game.densityForSpecies(i + 1));
     });
-    for (let g = 0; g < 40; g++) game.generationStep();
+    const gens = params.get('autotest') === 'nutrient' ? 360 : 40;
+    for (let g = 0; g < gens; g++) game.generationStep();
   }
 
   function setupBenchState() {

@@ -20,7 +20,13 @@
     this.glowSmall = document.createElement('canvas');
     this.glowSmall.width = 72;
     this.glowSmall.height = 72;
+    this.nutrientCanvas = document.createElement('canvas');
+    this.nutrientCanvas.width = 72;
+    this.nutrientCanvas.height = 72;
+    this.nutrientCtx = this.nutrientCanvas.getContext('2d');
+    this.nutrientImage = this.nutrientCtx.createImageData(72, 72);
     this.lastCellGeneration = -1;
+    this.lastNutrientGeneration = -999;
     this.lastDecayKey = -1;
     this.bubbles = [];
     this.markers = [];
@@ -124,6 +130,7 @@
     ctx.arc(cx, cy, rad, 0, Math.PI * 2);
     ctx.clip();
 
+    this.renderNutrition(ctx, game);
     this.renderBubbles(ctx, w, h, rad, dt);
     this.renderCells(ctx, game);
     ctx.restore();
@@ -159,6 +166,50 @@
     gctx.imageSmoothingEnabled = true;
     gctx.drawImage(this.cellCanvas, 0, 0, 72, 72);
     this.lastCellGeneration = game.generation;
+  };
+
+  PetriRenderer.prototype.rebuildNutrition = function (game) {
+    const data = this.nutrientImage.data;
+    for (let y = 0; y < 72; y++) {
+      for (let x = 0; x < 72; x++) {
+        let sum = 0, max = 0, count = 0;
+        for (let yy = 0; yy < 2; yy++) {
+          for (let xx = 0; xx < 2; xx++) {
+            const sx = x * 2 + xx, sy = y * 2 + yy;
+            const idx = sy * 144 + sx;
+            if (game.mask[idx]) {
+              sum += game.nutrient[idx];
+              max += game.nutrientCap[idx] || 255;
+              count++;
+            }
+          }
+        }
+        const p = (y * 72 + x) * 4;
+        if (!count) {
+          data[p] = 0; data[p + 1] = 0; data[p + 2] = 0; data[p + 3] = 0;
+        } else {
+          const ratio = max ? sum / max : 1;
+          const depleted = Math.max(0, 1 - ratio);
+          data[p] = 23;
+          data[p + 1] = 35;
+          data[p + 2] = 38;
+          data[p + 3] = Math.min(135, depleted * 185);
+        }
+      }
+    }
+    this.nutrientCtx.putImageData(this.nutrientImage, 0, 0);
+    this.lastNutrientGeneration = game.generation;
+  };
+
+  PetriRenderer.prototype.renderNutrition = function (ctx, game) {
+    if (game.generation - this.lastNutrientGeneration >= 4) this.rebuildNutrition(game);
+    const c = this.cell, ox = this.offsetX, oy = this.offsetY;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = 0.88;
+    ctx.drawImage(this.nutrientCanvas, ox, oy, c * 144, c * 144);
+    ctx.restore();
   };
 
   PetriRenderer.prototype.renderCells = function (ctx, game) {

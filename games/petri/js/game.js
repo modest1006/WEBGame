@@ -8,6 +8,12 @@
   const RADIUS = 69;
   const CENTER = 71.5;
   const SAVE_KEY = 'petri.save.v1';
+  const NUTRIENT_FULL = 230;
+  const NUTRIENT_STARVE = 145;
+  const NUTRIENT_BIRTH = 128;
+  const NUTRIENT_CONSUME = 7;
+  const NUTRIENT_RECOVER = 2;
+  const RIVAL_MULT = 1.5;
 
   const SPECIES = [
     null,
@@ -114,6 +120,8 @@
     this.cells = new Uint8Array(W * H);
     this.next = new Uint8Array(W * H);
     this.decay = new Uint8Array(W * H);
+    this.nutrient = new Uint8Array(W * H);
+    this.nutrientCap = new Uint8Array(W * H);
     this.rng = mulberry32((opts.seed || 1234567) >>> 0);
     this.seed = opts.seed || 0;
     this.generation = 0;
@@ -133,9 +141,14 @@
     this.selectedSpecies = 1;
     this.nextNaturalGeneration = 0;
     this.lowPopulationSince = 0;
+    this.dominanceSpecies = 0;
+    this.dominanceSince = 0;
+    this.nextBalanceGeneration = 0;
+    this.nextDiversityGeneration = 0;
     this.lastSavedAt = Date.now();
     this.perf = { generations: 0, ms: 0 };
     this._listeners = [];
+    this.initNutrients();
     if (!opts.skipLoad && !this.load()) this.seedDish();
     if (!this.nextNaturalGeneration) this.scheduleNaturalSpore();
   }
@@ -144,6 +157,26 @@
   PetriGame.PATTERNS = PATTERNS;
   PetriGame.WALL = WALL;
   PetriGame.EMPTY = EMPTY;
+  PetriGame.NUTRIENT_STARVE = NUTRIENT_STARVE;
+  PetriGame.NUTRIENT_BIRTH = NUTRIENT_BIRTH;
+
+  PetriGame.prototype.initNutrients = function () {
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = y * W + x;
+        if (!this.mask[idx]) {
+          this.nutrient[idx] = 0;
+          this.nutrientCap[idx] = 0;
+          continue;
+        }
+        const wave = Math.sin(x * 0.17) * 15 + Math.cos(y * 0.13) * 13 + Math.sin((x + y) * 0.047) * 18;
+        const noise = (this.rng() * 34) | 0;
+        const cap = Math.max(150, Math.min(255, NUTRIENT_FULL + wave + noise - 24));
+        this.nutrientCap[idx] = cap;
+        this.nutrient[idx] = cap - ((this.rng() * 18) | 0);
+      }
+    }
+  };
 
   PetriGame.prototype.on = function (fn) { this._listeners.push(fn); };
   PetriGame.prototype.emit = function (type, data) {
@@ -156,6 +189,7 @@
     this.cells.fill(EMPTY);
     this.next.fill(EMPTY);
     this.decay.fill(0);
+    this.initNutrients();
     for (let i = 0; i < 38; i++) {
       const sp = i % 2 ? 2 : 1;
       const a = this.rng() * Math.PI * 2;
@@ -187,6 +221,24 @@
     return ids.length ? ids[(this.rng() * ids.length) | 0] : 1;
   };
 
+  PetriGame.prototype.predatorOf = function (species) {
+    return species <= 1 ? 6 : species - 1;
+  };
+
+  PetriGame.prototype.dominantSpecies = function () {
+    let best = 0, bestN = 0;
+    for (let s = 1; s <= 6; s++) {
+      if (this.populationBySpecies[s] > bestN) { bestN = this.populationBySpecies[s]; best = s; }
+    }
+    return { species: best, share: bestN / Math.max(1, this.population) };
+  };
+
+  PetriGame.prototype.aliveSpeciesCount = function () {
+    let count = 0;
+    for (let s = 1; s <= 6; s++) if (this.populationBySpecies[s] >= 50) count++;
+    return count;
+  };
+
   PetriGame.prototype.densityForSpecies = function (species) {
     if (species === 3) return 0.28;
     if (species === 4 || species === 5) return 0.37;
@@ -194,10 +246,58 @@
     return 0.35;
   };
 
+  PetriGame.prototype.restoreNutrition = function (cx, cy, radius, silent) {
+    for (let y = Math.floor(cy - radius); y <= Math.ceil(cy + radius); y++) {
+      for (let x = Math.floor(cx - radius); x <= Math.ceil(cx + radius); x++) {
+        if (!this.inDish(x, y)) continue;
+        const dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy <= radius * radius) {
+          const idx = y * W + x;
+          this.nutrient[idx] = this.nutrientCap[idx] || NUTRIENT_FULL;
+        }
+      }
+    }
+    if (!silent) this.emit('feed', { x: cx, y: cy });
+  };
+
+  PetriGame.prototype.beats = function (a, b) {
+    return b === (a % 6) + 1;
+  };
+
+  PetriGame.prototype.consumeForSpecies = function (species, sameNeighbors) {
+    let n = NUTRIENT_CONSUME;
+    if (species === 6) n += 4;
+    else if (species === 4) n += 6;
+    else if (species === 5) n += 2;
+    else if (species === 3) n -= 2;
+    if (sameNeighbors >= 5) n += 4;
+    return n;
+  };
+
+  PetriGame.prototype.birthWinner = function (by) {
+    let winner = 0, best = -1;
+    for (let s = 1; s <= 6; s++) {
+      if (!this.unlocked[s] || by[s] <= 0) continue;
+      let score = by[s];
+      for (let t = 1; t <= 6; t++) {
+        if (t !== s && by[t] > 0 && this.beats(s, t)) score += by[t] * (RIVAL_MULT - 1);
+      }
+      if (this.populationBySpecies[s] < 200) score *= 1.8;
+      if (score > best + 0.001 || (Math.abs(score - best) <= 0.001 && this.rng() < 0.5)) {
+        best = score;
+        winner = s;
+      }
+    }
+    return winner;
+  };
+
   PetriGame.prototype.spawnFloatingSpores = function (reason) {
     const p = this.randomDishPoint();
-    const species = this.randomUnlockedSpecies();
+    const dom = this.dominantSpecies();
+    let species = this.randomUnlockedSpecies();
+    if (dom.share > 0.45 && this.unlocked[this.predatorOf(dom.species)]) species = this.predatorOf(dom.species);
     const radius = reason === 'low' ? 11 : 8 + ((this.rng() * 4) | 0);
+    this.restoreNutrition(p.x, p.y, radius + 4, true);
     this.scatter(p.x, p.y, species, radius, this.densityForSpecies(species));
     if (species === 1 || species === 2) {
       this.placePattern(species, (p.x - 2) | 0, (p.y - 2) | 0, this.rng() < 0.5 ? 'glider' : 'blinker');
@@ -205,6 +305,35 @@
     this.lowPopulationSince = 0;
     this.scheduleNaturalSpore();
     this.emit('spore', { x: p.x, y: p.y, species: species, reason: reason || 'natural' });
+  };
+
+  PetriGame.prototype.spawnCounterSpores = function (dominant) {
+    const species = this.predatorOf(dominant);
+    if (!this.unlocked[species]) return;
+    for (let k = 0; k < 8; k++) {
+      const p = this.randomDishPoint();
+      this.restoreNutrition(p.x, p.y, 19, true);
+      this.scatter(p.x, p.y, species, 16, Math.min(0.52, this.densityForSpecies(species) + 0.12));
+    }
+    this.emit('spore', { x: CENTER, y: CENTER, species: species, reason: 'counter' });
+    this.nextBalanceGeneration = this.generation + 160;
+  };
+
+  PetriGame.prototype.spawnDiversitySpores = function () {
+    const missing = [];
+    for (let s = 1; s <= 6; s++) {
+      if (this.unlocked[s] && this.populationBySpecies[s] < 50) missing.push(s);
+    }
+    for (let i = 0; i < missing.length; i++) {
+      const species = missing[i];
+      for (let k = 0; k < 3; k++) {
+        const p = this.randomDishPoint();
+        this.restoreNutrition(p.x, p.y, 20, true);
+        this.scatter(p.x, p.y, species, 15, Math.min(0.54, this.densityForSpecies(species) + 0.16));
+      }
+    }
+    this.emit('spore', { x: CENTER, y: CENTER, species: missing[0] || 1, reason: 'diversity' });
+    this.nextDiversityGeneration = this.generation + 8;
   };
 
   PetriGame.prototype.index = function (x, y) { return y * W + x; };
@@ -310,14 +439,14 @@
         if (a6 > 0 && a6 !== WALL) { total++; by[a6]++; }
         if (a7 > 0 && a7 !== WALL) { total++; by[a7]++; }
         let out = EMPTY;
+        const food = this.nutrient[idx];
         if (cur > 0 && cur !== WALL) {
           const hostile = total - by[cur];
-          if ((SPECIES[cur].s & (1 << total)) && hostile <= by[cur] + 3) out = cur;
-        } else if (total > 0) {
-          let winner = 0, best = -1;
-          for (let s = 1; s <= 6; s++) {
-            if (by[s] > best && this.unlocked[s]) { best = by[s]; winner = s; }
-          }
+          let survives = (SPECIES[cur].s & (1 << total)) && hostile <= by[cur] + 3;
+          if (food < NUTRIENT_STARVE) survives = !!(SPECIES[cur].s & (1 << (total + 1))) && total <= 2 && hostile <= by[cur] + 1;
+          if (survives) out = cur;
+        } else if (total > 0 && food >= NUTRIENT_BIRTH) {
+          const winner = this.birthWinner(by);
           if (winner && (SPECIES[winner].b & (1 << total))) out = winner;
         }
         n[idx] = out;
@@ -325,10 +454,16 @@
           pop++;
           counts[out]++;
           d[idx] = 0;
+          const used = this.consumeForSpecies(out, by[out]);
+          this.nutrient[idx] = food > used ? food - used : 0;
         } else if (cur > 0 && cur !== WALL) {
           d[idx] = 5;
+          this.nutrient[idx] = food > 1 ? food - 1 : 0;
         } else if (d[idx] > 0) {
           d[idx]--;
+          if (food < this.nutrientCap[idx]) this.nutrient[idx] = food + NUTRIENT_RECOVER;
+        } else if (food < this.nutrientCap[idx]) {
+          this.nutrient[idx] = food + NUTRIENT_RECOVER;
         }
       }
     }
@@ -349,6 +484,24 @@
       this.lowPopulationSince = 0;
     }
     if (this.generation >= this.nextNaturalGeneration) this.spawnFloatingSpores('natural');
+    if (this.aliveSpeciesCount() < 4 && this.population > 500 && this.generation >= this.nextDiversityGeneration) {
+      this.spawnDiversitySpores();
+    }
+    const dom = this.dominantSpecies();
+    if (dom.share > 0.6 && this.population > 300) {
+      if (this.dominanceSpecies === dom.species) {
+        if (!this.dominanceSince) this.dominanceSince = this.generation;
+      } else {
+        this.dominanceSpecies = dom.species;
+        this.dominanceSince = this.generation;
+      }
+      if (this.generation - this.dominanceSince > 128 && this.generation >= this.nextBalanceGeneration) {
+        this.spawnCounterSpores(dom.species);
+      }
+    } else {
+      this.dominanceSpecies = 0;
+      this.dominanceSince = 0;
+    }
   };
 
   PetriGame.prototype.step = function (ms) {
@@ -467,6 +620,9 @@
       this.scatter(x, y, species, 10, this.densityForSpecies(species));
       this.gauge -= 16;
       this.emit('drop', { x: x, y: y });
+    } else if (tool === 'feed') {
+      this.restoreNutrition(x, y, 14);
+      this.gauge -= 18;
     } else if (tool === 'stir') {
       this.stir(x, y, 10);
       this.gauge -= 22;
@@ -490,6 +646,7 @@
   PetriGame.prototype.addPoints = function (n) { this.spores += Number(n) || 0; };
   PetriGame.prototype.resetDish = function () {
     this.cells.fill(EMPTY); this.next.fill(EMPTY); this.decay.fill(0);
+    this.initNutrients();
     this.population = 0; this.populationBySpecies = [0,0,0,0,0,0,0];
     this.generation = 0; this.maxPopulation = 0;
     this.emit('reset', {});
@@ -519,6 +676,30 @@
     return out;
   };
 
+  PetriGame.prototype.encodeArray = function (arr) {
+    let out = '', last = arr[0], count = 1;
+    function push(v, n) { out += v.toString(36) + ':' + n.toString(36) + ';'; }
+    for (let i = 1; i < arr.length; i++) {
+      const v = arr[i];
+      if (v === last && count < 65535) count++;
+      else { push(last, count); last = v; count = 1; }
+    }
+    push(last, count);
+    return out;
+  };
+
+  PetriGame.prototype.decodeArray = function (str, target) {
+    const parts = String(str || '').split(';');
+    let pos = 0;
+    for (let i = 0; i < parts.length; i++) {
+      if (!parts[i]) continue;
+      const kv = parts[i].split(':');
+      const val = parseInt(kv[0], 36), count = parseInt(kv[1], 36);
+      for (let j = 0; j < count && pos < target.length; j++) target[pos++] = val;
+    }
+    return pos === target.length;
+  };
+
   PetriGame.prototype.decodeBoard = function (str) {
     const arr = new Uint8Array(W * H);
     const parts = String(str || '').split(';');
@@ -536,7 +717,7 @@
     if (typeof localStorage === 'undefined') return false;
     const data = {
       generation: this.generation, spores: this.spores, maxPopulation: this.maxPopulation,
-      unlocked: this.unlocked, codex: this.codex, board: this.encodeBoard(), lastSavedAt: Date.now(),
+      unlocked: this.unlocked, codex: this.codex, board: this.encodeBoard(), nutrient: this.encodeArray(this.nutrient), nutrientCap: this.encodeArray(this.nutrientCap), lastSavedAt: Date.now(),
       seed: this.seed, nextNaturalGeneration: this.nextNaturalGeneration, lowPopulationSince: this.lowPopulationSince
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -559,6 +740,10 @@
       this.nextNaturalGeneration = data.nextNaturalGeneration || 0;
       this.lowPopulationSince = data.lowPopulationSince || 0;
       this.decodeBoard(data.board);
+      if (data.nutrient && data.nutrientCap) {
+        this.decodeArray(data.nutrient, this.nutrient);
+        this.decodeArray(data.nutrientCap, this.nutrientCap);
+      }
       this.measurePopulation();
       return true;
     } catch (err) {
@@ -580,6 +765,9 @@
       paused: this.paused,
       maxPopulation: this.maxPopulation,
       nextNaturalGeneration: this.nextNaturalGeneration,
+      nutrientAverage: this.averageNutrition(),
+      nutrientStarve: NUTRIENT_STARVE,
+      nutrientBirth: NUTRIENT_BIRTH,
       unlocked: Object.assign({}, this.unlocked),
       species: SPECIES.slice(1),
       perf: {
@@ -588,6 +776,14 @@
         gps: this.perf.ms > 0 ? this.perf.generations / (this.perf.ms / 1000) : 0
       }
     };
+  };
+
+  PetriGame.prototype.averageNutrition = function () {
+    let sum = 0, count = 0;
+    for (let i = 0; i < this.nutrient.length; i++) {
+      if (this.mask[i]) { sum += this.nutrient[i]; count++; }
+    }
+    return count ? sum / count : 0;
   };
 
   PetriGame.prototype.dump = function () {
@@ -606,6 +802,8 @@
   PetriGame.prototype.validate = function () {
     const a = new PetriGame({ seed: 1, skipLoad: true });
     a.unlocked = { 1: true };
+    a.nutrient.fill(255);
+    a.nutrientCap.fill(255);
     a.placePattern(1, 70, 70, 'blinker');
     a.generationStep();
     const vertical = a.cells[69 * W + 71] === 1 && a.cells[70 * W + 71] === 1 && a.cells[71 * W + 71] === 1;
@@ -613,6 +811,8 @@
     const horizontal = a.cells[70 * W + 70] === 1 && a.cells[70 * W + 71] === 1 && a.cells[70 * W + 72] === 1;
     const b = new PetriGame({ seed: 2, skipLoad: true });
     b.unlocked = { 1: true };
+    b.nutrient.fill(255);
+    b.nutrientCap.fill(255);
     b.placePattern(1, 60, 60, 'glider');
     for (let i = 0; i < 4; i++) b.generationStep();
     const moved = [[62,61],[63,62],[61,63],[62,63],[63,63]].every(function (p) { return b.cells[p[1] * W + p[0]] === 1; });

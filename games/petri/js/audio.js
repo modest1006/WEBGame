@@ -45,6 +45,7 @@
 
   PetriAudio.prototype.event = function (type) {
     if (type === 'drop') this.tone(170, 0.18, 'sine', 0.09);
+    if (type === 'feed') this.tone(230, 0.2, 'sine', 0.07);
     if (type === 'spore') this.tone(330, 0.16, 'triangle', 0.045);
     if (type === 'stir') this.tone(95, 0.28, 'sawtooth', 0.04);
     if (type === 'discover') {
