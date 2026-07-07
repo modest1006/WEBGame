@@ -77,7 +77,7 @@ function studioHtml() {
   const meta = normalizeMeta(game.meta);
   const rack = META_GEAR.map((g, i) => {
     const lv = gearLevel(meta, g.id);
-    return `<span class="rack-unit ${lv > 0 ? 'on' : ''}" style="--i:${i}"><b>${lv}</b></span>`;
+    return `<span class="rack-unit ${lv > 0 ? 'on' : ''} lv${lv}" style="--i:${i}" aria-label="${g.name} Lv${lv}"></span>`;
   }).join('');
   const list = META_GEAR.map((g) => {
     const lv = gearLevel(meta, g.id);
@@ -105,11 +105,13 @@ function achievementsHtml() {
 
 function loadoutHtml() {
   const recordLv = gearLevel(game.meta, 'record_bag');
+  const weaponSymbols = { beatshot: '♪', nova: '◎', bass: '◣', laser: '✦' };
+  const passiveSymbols = { amp: '▲', speaker: '◎', footwork: '»', battery: '+', metronome: '♪' };
   const weaponBtns = Object.entries(WEAPONS).map(([key, def]) =>
-    `<button class="loadout-btn ${pendingLoadout.weapon === key ? 'active' : ''}" data-loadout-weapon="${key}">${def.icon}<span>${def.name}</span></button>`).join('');
+    `<button class="loadout-btn ${pendingLoadout.weapon === key ? 'active' : ''}" data-loadout-weapon="${key}"><b>${weaponSymbols[key] ?? '♪'}</b><span>${def.name}</span></button>`).join('');
   const passiveBtns = recordLv >= 3 ? '<div class="loadout-group">'
     + Object.entries(PASSIVES).map(([key, def]) =>
-      `<button class="loadout-btn small ${pendingLoadout.passive === key ? 'active' : ''}" data-loadout-passive="${key}">${def.icon}<span>${def.name}</span></button>`).join('')
+      `<button class="loadout-btn small ${pendingLoadout.passive === key ? 'active' : ''}" data-loadout-passive="${key}"><b>${passiveSymbols[key] ?? '♪'}</b><span>${def.name}</span></button>`).join('')
     + '</div>' : '';
   return `<p class="loadout-note">RECORD BAG Lv${recordLv} / First track setup</p>`
     + `<div class="loadout-group">${weaponBtns}</div>`
@@ -139,6 +141,7 @@ function settingsHtml() {
       + `<b>${value}</b></label>`;
   };
   return '<div class="settings-panel">'
+    + '<button class="resume-btn" data-resume="1">RESUME</button>'
     + `<button class="setting-toggle" data-setting="screenShake">SHAKE <b>${game.settings.screenShake ? 'ON' : 'OFF'}</b></button>`
     + `<button class="setting-toggle" data-setting="reducedFlash">FLASH <b>${game.settings.reducedFlash ? 'LOW' : 'FULL'}</b></button>`
     + '<div class="volume-panel">'
@@ -328,11 +331,14 @@ overlay.addEventListener('pointerdown', (e) => {
   syncModeButtons();
 });
 overlay.addEventListener('pointerdown', (e) => {
-  const handled = e.target.closest('[data-open-studio],[data-open-achievements],[data-back-title],[data-start-run],[data-confirm-loadout],[data-loadout-weapon],[data-loadout-passive],[data-buy-gear]');
+  const handled = e.target.closest('[data-open-studio],[data-open-achievements],[data-back-title],[data-start-run],[data-confirm-loadout],[data-loadout-weapon],[data-loadout-passive],[data-buy-gear],[data-resume]');
   if (!handled) return;
   e.preventDefault();
   e.stopImmediatePropagation();
-  if (handled.dataset.openStudio) {
+  music.unlock();
+  if (handled.dataset.resume) {
+    game.resume();
+  } else if (handled.dataset.openStudio) {
     if (game.state === 'dead' || game.state === 'clear') game.state = 'title';
     overlayView = 'studio';
   } else if (handled.dataset.openAchievements) {
@@ -408,6 +414,17 @@ document.addEventListener('visibilitychange', () => {
 window.__music = {
   getPhraseLog: () => music.phraseLog.slice(),
   getVolumes: () => music.getVolumes(),
+  getAudioState: () => ({
+    unlocked: !!music.ctx,
+    ctxState: music.ctx?.state ?? 'none',
+    nextStep: music.nextStep,
+    lastScheduleState: music.lastScheduleState,
+    master: music.master?.gain.value ?? null,
+    bgm: music.bgmGain?.gain.value ?? null,
+    sfx: music.sfxGain?.gain.value ?? null,
+    judge: music.judgeGain?.gain.value ?? null,
+    hasCompressor: !!music.compressor,
+  }),
   setVolume: (kind, value) => {
     const applied = music.setVolume(kind, value);
     saveSettings();

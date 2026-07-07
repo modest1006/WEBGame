@@ -13,6 +13,7 @@ class Music {
     this.anchorBeat = 0;
     this.anchorTime = 0;
     this.timer = null;
+    this.lastScheduleState = null;
     this.bossMode = false;
     this.currentPhrase = { index: -1, variant: 0, hats16: false, lead: false, pad: 0, arp: 0 };
     this.phraseLog = [];
@@ -115,21 +116,41 @@ class Music {
   }
 
   schedule() {
-    if (!this.ctx || this.game.state === 'title') return;
-    const beatSec = this.game.audioBeatMs ? this.game.audioBeatMs() / 1000 : 60 / BPM;
+    if (!this.ctx) return;
     const now = this.ctx.currentTime;
-    this.anchorBeat = this.game.audioBeat ?? this.game.beat;
+    const st = this.game.state;
+    if (st !== this.lastScheduleState) {
+      this.nextStep = Math.floor((st === 'title' ? now * BPM / 60 : (this.game.audioBeat ?? this.game.beat)) * 4);
+      this.lastScheduleState = st;
+    }
+    const titleMode = st === 'title' || st === 'paused' || st === 'dead' || st === 'clear';
+    const beatSec = titleMode ? 60 / BPM : (this.game.audioBeatMs ? this.game.audioBeatMs() / 1000 : 60 / BPM);
+    const clockBeat = titleMode ? now / beatSec : (this.game.audioBeat ?? this.game.beat);
+    this.anchorBeat = clockBeat;
     this.anchorTime = now;
-    const curStep = Math.floor((this.game.audioBeat ?? this.game.beat) * 4);
+    const curStep = Math.floor(clockBeat * 4);
     if (this.nextStep < curStep) this.nextStep = curStep;
     while (true) {
       const t = this.anchorTime + (this.nextStep / 4 - this.anchorBeat) * beatSec;
       if (t > now + 0.18) break;
-      const st = this.game.state;
-      if (t >= now - 0.02 && (st === 'playing' || st === 'levelup' || st === 'dying')) {
-        this.playStep(this.nextStep, Math.max(t, now + 0.001));
+      if (t >= now - 0.02) {
+        if (titleMode) this.playTitleStep(this.nextStep, Math.max(t, now + 0.001));
+        else if (st === 'playing' || st === 'levelup' || st === 'dying') this.playStep(this.nextStep, Math.max(t, now + 0.001));
       }
       this.nextStep++;
+    }
+  }
+
+  playTitleStep(step, t) {
+    const s16 = step % 16;
+    if (s16 % 4 === 0) this.kick(t);
+    if (s16 % 2 === 0) this.hihat(t, s16 % 4 === 2 ? 0.12 : 0.08);
+    const bn = this.bassPat[s16];
+    if (bn >= 0) this.bass(t, 55 * Math.pow(2, bn / 12), 0.11);
+    const titleLayer = this.game.meta?.achievements?.includes('groove_max');
+    if (titleLayer && s16 % 4 === 2) {
+      const n = [0, 7, 10, 15][Math.floor(step / 4) % 4];
+      this.pluck(t, 440 * Math.pow(2, (n - 12) / 12), 0.035, this.upperFilter);
     }
   }
 
