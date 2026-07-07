@@ -27,11 +27,13 @@ function installDebug(game) {
     // 次のビート境界の指定オフセット(ms)まで進める（ダッシュ判定テスト用）
     stepToBeatOffset(offsetMs = 0) {
       const target = Math.ceil(game.beat + 0.3); // 次のビート
-      const targetTime = (target * BEAT_MS + offsetMs) / 1000;
+
+      const targetTime = game.timeForBeat ? game.timeForBeat(target, offsetMs) : (target * BEAT_MS + offsetMs) / 1000;
       const ms = (targetTime - game.time) * 1000;
       return stepWhilePlaying(Math.max(0, ms));
     },
-    start: () => game.start(),
+    start: (mode) => game.start(mode),
+    setMode: (mode) => game.setMode(mode),
     pause: () => { if (game.state === 'playing') game.togglePause(); },
     resume: () => { if (game.state === 'paused') game.togglePause(); },
     hold: (mx, my) => { game.ctrl.mx = mx; game.ctrl.my = my; },

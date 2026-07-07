@@ -38,7 +38,7 @@ class Music {
   // game.beat → audio時刻の変換（毎スケジュールで再アンカー）
   schedule() {
     if (!this.ctx || this.game.state === 'title') return;
-    const beatSec = 60 / BPM;
+    const beatSec = this.game.currentBeatMs ? this.game.currentBeatMs() / 1000 : 60 / BPM;
     const now = this.ctx.currentTime;
     // 再アンカー: 現在のgame.beatがnowに対応する
     this.anchorBeat = this.game.beat;

@@ -80,6 +80,10 @@ class Renderer {
         this.texts.push({ x: p.x, y: p.y - 80, text: '⚠ BOSS ⚠', color: '#ffd23e', age: 0, size: 26 });
         this.shakeT = 400; this.shakeMag = 6;
         break;
+      case 'titlecard':
+        this.texts.push({ x: p.x, y: p.y - 120, text: data.title, color: '#ffd23e', age: 0, size: 34, life: 1.6 });
+        this.shakeT = 500; this.shakeMag = 5;
+        break;
       case 'levelup-open':
         this.rings.push({ x: p.x, y: p.y, r: 10, max: 90, life: 0.4, age: 0, color: '#7cff9e', w: 3 });
         break;
@@ -101,7 +105,12 @@ class Renderer {
 
     // 背景（ビートで明滅する暗色）
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = `rgb(${8 + pulse * 5 + grooveN * 6}, ${6 + pulse * 3}, ${18 + pulse * 8 + grooveN * 10})`;
+    if (game.isEndless && game.isEndless() && game.time >= OVERDRIVE_TIME) {
+      const hue = (210 + (game.time - OVERDRIVE_TIME) * 9) % 360;
+      ctx.fillStyle = `hsl(${hue} 54% ${8 + pulse * 3 + grooveN * 4}%)`;
+    } else {
+      ctx.fillStyle = `rgb(${8 + pulse * 5 + grooveN * 6}, ${6 + pulse * 3}, ${18 + pulse * 8 + grooveN * 10})`;
+    }
     ctx.fillRect(0, 0, W, H);
 
     let shX = 0, shY = 0;
@@ -276,11 +285,12 @@ class Renderer {
     // フロートテキスト
     ctx.globalCompositeOperation = 'source-over';
     ctx.textAlign = 'center';
-    this.texts = this.texts.filter((t) => t.age < 0.8);
+    this.texts = this.texts.filter((t) => t.age < (t.life ?? 0.8));
     for (const t of this.texts) {
       t.age += dt;
+      const life = t.life ?? 0.8;
       ctx.font = `900 ${t.size}px 'M PLUS Rounded 1c', sans-serif`;
-      ctx.globalAlpha = 1 - t.age / 0.8;
+      ctx.globalAlpha = 1 - t.age / life;
       ctx.fillStyle = t.color;
       ctx.fillText(t.text, t.x, t.y - t.age * 40);
     }

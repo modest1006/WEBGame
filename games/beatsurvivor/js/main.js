@@ -11,6 +11,7 @@ const $ = (id) => document.getElementById(id);
 const overlay = $('overlay');
 const levelupPanel = $('levelup');
 let endedAt = 0;
+let selectedMode = MODE_NORMAL;
 
 function fmtTime(t) {
   const m = Math.floor(t / 60);
@@ -22,12 +23,32 @@ function showOverlay(title, sub) {
   $('overlay-title').innerHTML = title;
   $('overlay-sub').innerHTML = sub;
   overlay.classList.remove('hidden');
+  syncModeButtons();
 }
 
 function statLine(d) {
-  return `生存 ${fmtTime(d.time)}　Lv${d.level}　撃破 ${d.kills}<br>`
+  if (d.mode === MODE_ENDLESS) {
+    const best = d.bestTime ? `<br>BEST ${fmtTime(d.bestTime)}` : '';
+    return `SURVIVAL ${fmtTime(d.time)} / KILLS ${d.kills} / SCORE ${d.score}<br>`
+      + `MAX GROOVE x${(1 + Math.min(d.maxGroove ?? 0, GROOVE_MAX) * GROOVE_STEP).toFixed(2)} / BPM ${d.bpm ?? BPM}`
+      + best;
+  }
+  return `TIME ${fmtTime(d.time)} / Lv${d.level} / KILLS ${d.kills}<br>`
     + `PERFECT ${d.perfect} / GOOD ${d.good} / MISS ${d.miss}<br>`
-    + `最大GROOVE ×${(1 + Math.min(d.maxGroove, GROOVE_MAX) * GROOVE_STEP).toFixed(2)}`;
+    + `MAX GROOVE x${(1 + Math.min(d.maxGroove ?? 0, GROOVE_MAX) * GROOVE_STEP).toFixed(2)}`;
+}
+
+function modeSelectHtml() {
+  return '<div class="mode-select">'
+    + `<button class="mode-btn" data-mode="${MODE_NORMAL}">NORMAL<span>3:00 BOSS / 5:00 CLEAR</span></button>`
+    + `<button class="mode-btn" data-mode="${MODE_ENDLESS}">ENDLESS<span>SURVIVE UNTIL DEATH</span></button>`
+    + '</div>';
+}
+
+function syncModeButtons() {
+  for (const btn of document.querySelectorAll('[data-mode]')) {
+    btn.classList.toggle('active', btn.dataset.mode === selectedMode);
+  }
 }
 
 function syncOverlay() {
@@ -35,7 +56,7 @@ function syncOverlay() {
   switch (game.state) {
     case 'title':
       showOverlay('BEAT<br>SURVIVOR',
-        'WASD/←→↑↓:移動　<b>SPACE:ダッシュ</b><br>'
+        modeSelectHtml() + 'WASD/←→↑↓:移動　<b>SPACE:ダッシュ</b><br>'
         + 'ビートに合わせてダッシュすると <b>GROOVE</b> が上がり火力アップ！<br>'
         + '自機に収束するリングがビートの目印。3分後のボスを倒せ！<br><br>'
         + 'キー入力 / タップ でスタート');
@@ -131,7 +152,7 @@ const actions = {
       syncOverlay();
     }
   },
-  restart: () => { if (game.state !== 'title') { game.start(); syncOverlay(); } },
+  restart: () => { if (game.state !== 'title') { game.start(selectedMode); syncOverlay(); } },
   mute: () => {
     const muted = music.toggleMute();
     $('mute-btn').textContent = muted ? '🔇' : '🔊';
@@ -139,15 +160,24 @@ const actions = {
   debug: () => debugOverlay.toggle(),
   anyInput: () => {
     music.unlock();
-    if (game.state === 'title') { game.start(); syncOverlay(); }
+    if (game.state === 'title') { game.start(selectedMode); syncOverlay(); }
     else if ((game.state === 'dead' || game.state === 'clear') && performance.now() - endedAt > 800) {
-      game.start();
+      game.start(selectedMode);
       syncOverlay();
     }
   },
 };
 
 new Input(game, actions, document.getElementById('view'));
+overlay.addEventListener('pointerdown', (e) => {
+  const modeBtn = e.target.closest('[data-mode]');
+  if (!modeBtn) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  selectedMode = modeBtn.dataset.mode === MODE_ENDLESS ? MODE_ENDLESS : MODE_NORMAL;
+  game.setMode(selectedMode);
+  syncModeButtons();
+});
 overlay.addEventListener('pointerdown', (e) => { e.preventDefault(); actions.anyInput(); });
 window.addEventListener('resize', () => renderer.resize());
 
@@ -165,10 +195,10 @@ function updateHud() {
   hud.hpText.textContent = `${Math.max(0, Math.round(game.p.hp))}`;
   hud.xpFill.style.width = `${(game.xp / xpForLevel(game.level)) * 100}%`;
   hud.level.textContent = game.level;
-  hud.time.textContent = fmtTime(game.time);
+  hud.time.textContent = game.isEndless() ? `${fmtTime(game.time)} / ${Math.round(game.currentBpm())} BPM` : fmtTime(game.time);
   hud.kills.textContent = game.kills;
   hud.grooveFill.style.width = `${Math.min(game.groove, GROOVE_MAX) / GROOVE_MAX * 100}%`;
-  hud.grooveMult.textContent = `×${game.grooveMult().toFixed(2)}`;
+  hud.grooveMult.textContent = `x${game.grooveMult().toFixed(2)}`;
   if (game.groove !== grooveShown) {
     grooveShown = game.groove;
     hud.groove.textContent = game.groove;

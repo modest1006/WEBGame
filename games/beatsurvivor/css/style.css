@@ -282,6 +282,42 @@ html, body {
 .overlay-sub { font-size: 14px; line-height: 2.1; color: var(--text); }
 .overlay-sub b { color: var(--yellow); }
 
+.mode-select {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto 16px;
+  flex-wrap: wrap;
+}
+
+.mode-btn {
+  width: 190px;
+  min-height: 58px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: rgba(24, 18, 48, 0.82);
+  color: var(--text);
+  font-family: var(--font-num);
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.mode-btn span {
+  display: block;
+  margin-top: 5px;
+  color: var(--dim);
+  font-family: var(--font);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.mode-btn.active {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  box-shadow: 0 0 20px rgba(255, 210, 62, 0.24);
+}
+
 /* ---- バーチャルスティック ---- */
 .stick-base {
   position: fixed;

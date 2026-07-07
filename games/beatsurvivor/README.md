@@ -71,3 +71,12 @@ __game.stepToBeatOffset(120);  // ビートから120msズラす
 __game.dash();                 // → 'good'
 __game.getState().grooveMult;  // 1.15
 ```
+
+## Endless Mode
+
+- Title mode select: `NORMAL` keeps the original 3:00 boss / 5:00 clear rules. `ENDLESS` has no clear condition and continues until death.
+- Endless score is `survival seconds + kills`; HUD shows elapsed time and current BPM.
+- After 5:00, overdrive starts: background hue shifts and BPM rises by +4 BPM/min up to 160 BPM.
+- A boss spawns every 3:00. Later bosses gain HP/speed and stronger adds. Boss kills fully restore GROOVE and grant one level worth of XP.
+- Endless result stores best survival time in `localStorage` key `beatsurvivor.endless.bestTime.v1`.
+- Debug: `__game.setMode('endless')` or `__game.start('endless')`.

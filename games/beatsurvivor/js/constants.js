@@ -1,6 +1,13 @@
 // ===== ビート =====
 const BPM = 132;
 const BEAT_MS = 60000 / BPM;           // 454.5ms
+const MODE_NORMAL = 'normal';
+const MODE_ENDLESS = 'endless';
+const OVERDRIVE_TIME = 300;            // ENDLESS: 5:00縺九ｉBPM荳頑丐
+const OVERDRIVE_BPM_PER_MIN = 4;
+const BPM_MAX = 160;
+const ENDLESS_BOSS_INTERVAL = 180;     // ENDLESS: 3:00豈弱↓繝懊せ
+const ENDLESS_BEST_KEY = 'beatsurvivor.endless.bestTime.v1';
 const PERFECT_MS = 80;                 // ビート±この範囲のダッシュでPERFECT
 const GOOD_MS = 150;                   // GOOD（GROOVE維持）
 const GROOVE_STEP = 0.15;              // GROOVE 1につき火力+15%
@@ -98,4 +105,22 @@ function xpForLevel(level) {
 // 経過時間(秒)ごとの毎秒スポーン数
 function spawnRate(t) {
   return 0.7 + (t / 60) * 1.05;
+}
+
+function bpmForTime(mode, t) {
+  if (mode !== MODE_ENDLESS || t <= OVERDRIVE_TIME) return BPM;
+  return Math.min(BPM_MAX, BPM + ((t - OVERDRIVE_TIME) / 60) * OVERDRIVE_BPM_PER_MIN);
+}
+
+function beatAtTime(mode, t) {
+  if (mode !== MODE_ENDLESS || t <= OVERDRIVE_TIME) return t * (BPM / 60);
+  const over = t - OVERDRIVE_TIME;
+  const rampEnd = OVERDRIVE_TIME + ((BPM_MAX - BPM) / OVERDRIVE_BPM_PER_MIN) * 60;
+  if (t <= rampEnd) {
+    return OVERDRIVE_TIME * (BPM / 60)
+      + (BPM * over + (OVERDRIVE_BPM_PER_MIN / 120) * over * over) / 60;
+  }
+  const rampDur = rampEnd - OVERDRIVE_TIME;
+  const rampBeats = (BPM * rampDur + (OVERDRIVE_BPM_PER_MIN / 120) * rampDur * rampDur) / 60;
+  return OVERDRIVE_TIME * (BPM / 60) + rampBeats + (t - rampEnd) * (BPM_MAX / 60);
 }

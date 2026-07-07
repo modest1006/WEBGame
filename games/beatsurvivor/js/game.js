@@ -5,6 +5,7 @@ class Game {
     this.seedValue = seed;
     this.listeners = [];
     this.state = 'title'; // title | playing | levelup | paused | dead | clear
+    this.mode = MODE_NORMAL;
     this.ctrl = { mx: 0, my: 0 }; // 移動入力（-1..1、input.jsが書き込む）
     this.resetRun();
   }
@@ -44,17 +45,28 @@ class Game {
     this.pendingLevels = 0;
     this.choices = [];
     this.spawnAcc = 0;
+    this.spawnPressure = 0;
     this.accentUntil = 0;   // このビートまで全攻撃がアクセント（PERFECTで更新）
     this.echoQueue = [];    // ビート境界で発動する残響攻撃（ノヴァ2連など）
     this.bossSpawned = false;
     this.bossRef = null;
+    this.bossSpawns = 0;
+    this.nextBossTime = BOSS_TIME;
+    this.endlessTitleShown = false;
     this.nextId = 1;
   }
 
-  start() {
+  setMode(mode) {
+    this.mode = mode === MODE_ENDLESS ? MODE_ENDLESS : MODE_NORMAL;
+    if (this.state === 'title' || this.state === 'dead' || this.state === 'clear') this.resetRun();
+    return this.mode;
+  }
+
+  start(mode = this.mode) {
+    this.mode = mode === MODE_ENDLESS ? MODE_ENDLESS : MODE_NORMAL;
     this.resetRun();
     this.state = 'playing';
-    this.emit('start');
+    this.emit('start', { mode: this.mode });
   }
 
   togglePause() {
@@ -70,13 +82,30 @@ class Game {
   moveSpeed() { return PLAYER.speed * (1 + this.passives.footwork * 0.12); }
   pickupR() { return PLAYER.pickupRadius * (1 + this.passives.speaker * 0.45); }
   perfectWindow() { return PERFECT_MS + this.passives.metronome * 25; }
+  currentBpm() { return bpmForTime(this.mode, this.time); }
+  currentBeatMs() { return 60000 / this.currentBpm(); }
+  isEndless() { return this.mode === MODE_ENDLESS; }
+  score() { return Math.floor(this.time) + this.kills; }
+
+  timeForBeat(targetBeat, offsetMs = 0) {
+    let lo = Math.max(0, this.time - 1);
+    let hi = Math.max(lo + 1, this.time + 2);
+    const target = targetBeat + offsetMs / this.currentBeatMs();
+    while (beatAtTime(this.mode, hi) < target) hi += 2;
+    for (let i = 0; i < 28; i++) {
+      const mid = (lo + hi) / 2;
+      if (beatAtTime(this.mode, mid) < target) lo = mid;
+      else hi = mid;
+    }
+    return hi;
+  }
 
   // ===== リズムアクション: ダッシュ =====
   dash() {
     if (this.state !== 'playing') return null;
     const p = this.p;
     if (p.dashCd > 0) return null;
-    const offset = (this.beat - Math.round(this.beat)) * BEAT_MS; // ビートからのズレms
+    const offset = (this.beat - Math.round(this.beat)) * this.currentBeatMs(); // ビートからのズレms
     const abs = Math.abs(offset);
     let judge;
     if (abs <= this.perfectWindow()) {
@@ -126,7 +155,7 @@ class Game {
 
   tick(dt) {
     this.time += dt;
-    this.beat = this.time * (BPM / 60);
+    this.beat = beatAtTime(this.mode, this.time);
 
     // 8分音符境界を横断したら発火
     const half = Math.floor(this.beat * 2);
@@ -143,7 +172,11 @@ class Game {
     this.updateGems(dt);
     this.spawnLogic(dt);
 
-    if (this.time >= SESSION_CLEAR_TIME && this.state === 'playing') this.finish('clear');
+    if (!this.isEndless() && this.time >= SESSION_CLEAR_TIME && this.state === 'playing') this.finish('clear');
+    if (this.isEndless() && !this.endlessTitleShown && this.time >= 600) {
+      this.endlessTitleShown = true;
+      this.emit('titlecard', { title: 'NIGHT RIDER' });
+    }
   }
 
   onHalfTick(ht) {
@@ -179,8 +212,8 @@ class Game {
     }
 
     // ビート同期の特殊スポーン
-    if (this.time > 45 && beatIndex % 8 === 0) this.spawnBurst('swarm', 5 + Math.floor(this.time / 50));
-    if (this.time > 100 && beatIndex % 16 === 0) this.spawnBurst('tank', 1 + Math.floor(this.time / 140));
+    if (this.time > 45 && beatIndex % 8 === 0) this.spawnBurst('swarm', 5 + Math.floor(this.time / 50) + (this.isEndless() ? Math.floor(this.bossSpawns * 1.5) : 0));
+    if (this.time > 100 && beatIndex % 16 === 0) this.spawnBurst('tank', 1 + Math.floor(this.time / 140) + (this.isEndless() ? Math.floor(this.bossSpawns / 2) : 0));
     // ボスの突進テレグラフ
     if (this.bossRef && beatIndex % 8 === 4) {
       this.bossRef.charge = 2; // 2ビートぶん突進
@@ -217,31 +250,38 @@ class Game {
   }
 
   // ===== 敵 =====
-  spawnEnemy(type, x, y) {
-    if (this.enemies.length >= ENEMY_CAP && type !== 'boss') return null;
+  spawnEnemy(type, x, y, opts = {}) {
+    if (this.enemies.length >= ENEMY_CAP && type !== 'boss') {
+      if (this.isEndless()) this.boostExistingEnemies(type);
+      return null;
+    }
     const def = ENEMIES[type];
     const minutes = this.time / 60;
+    const bossRank = opts.bossRank ?? 1;
+    const endlessBoost = this.isEndless() ? Math.max(0, minutes - 5) : 0;
+    const hpScale = type === 'boss' && this.isEndless() ? 1 + (bossRank - 1) * 0.65 : 1;
+    const speedScale = this.isEndless() ? 1 + Math.min(0.75, endlessBoost * 0.035) + (type === 'boss' ? (bossRank - 1) * 0.12 : 0) : 1;
     const e = {
       id: this.nextId++,
       type, x, y,
       r: def.r,
-      hp: def.hp + def.hpGrow * minutes,
-      maxHp: def.hp + def.hpGrow * minutes,
-      dmg: def.dmg, xp: def.xp, speed: def.speed,
+      hp: (def.hp + def.hpGrow * minutes) * hpScale,
+      maxHp: (def.hp + def.hpGrow * minutes) * hpScale,
+      dmg: def.dmg, xp: def.xp, speed: def.speed * speedScale,
       kbx: 0, kby: 0, flash: 0, charge: 0,
     };
     this.enemies.push(e);
     return e;
   }
 
-  spawnAround(type, dist = null) {
+  spawnAround(type, dist = null, opts = {}) {
     const a = this.rng.range(0, Math.PI * 2);
     const r = dist ?? this.rng.range(650, 900);
     let x = this.p.x + Math.cos(a) * r;
     let y = this.p.y + Math.sin(a) * r;
     const d = Math.hypot(x, y);
     if (d > ARENA_R - 30) { x *= (ARENA_R - 30) / d; y *= (ARENA_R - 30) / d; }
-    return this.spawnEnemy(type, x, y);
+    return this.spawnEnemy(type, x, y, opts);
   }
 
   spawnBurst(type, n) {
@@ -255,11 +295,44 @@ class Game {
       this.spawnAcc -= 1;
       this.spawnAround('chaser');
     }
-    if (!this.bossSpawned && this.time >= BOSS_TIME) {
+    if (!this.isEndless() && !this.bossSpawned && this.time >= BOSS_TIME) {
       this.bossSpawned = true;
       this.bossRef = this.spawnAround('boss', 750);
       this.emit('boss');
     }
+    if (this.isEndless()) {
+      while (this.time + 0.001 >= this.nextBossTime) {
+        this.spawnEndlessBoss();
+        this.nextBossTime += ENDLESS_BOSS_INTERVAL;
+      }
+    }
+  }
+
+  boostExistingEnemies(type) {
+    this.spawnPressure++;
+    const every = Math.max(1, Math.floor(this.spawnPressure / 8) + 1);
+    for (let i = this.enemies.length - 1; i >= 0; i -= every) {
+      const e = this.enemies[i];
+      if (e.type === 'boss') continue;
+      e.maxHp *= 1.01;
+      e.hp *= 1.01;
+      e.speed *= 1.0025;
+    }
+  }
+
+  spawnEndlessBoss() {
+    this.bossSpawns++;
+    const rank = this.bossSpawns;
+    if (this.enemies.length >= ENEMY_CAP) {
+      this.boostExistingEnemies('boss');
+      const idx = this.enemies.findIndex((e) => e.type !== 'boss');
+      if (idx >= 0) this.enemies.splice(idx, 1);
+    }
+    this.bossRef = this.spawnAround('boss', 750, { bossRank: rank });
+    this.spawnBurst('swarm', 8 + rank * 3);
+    const tankN = Math.floor(rank / 2);
+    if (tankN > 0) this.spawnBurst('tank', tankN);
+    this.emit('boss', { rank });
   }
 
   updateEnemies(dt) {
@@ -270,7 +343,7 @@ class Game {
       const dx = p.x - e.x, dy = p.y - e.y;
       const d = Math.hypot(dx, dy) || 1;
       let sp = e.speed * (1 + 0.35 * beatPulse);
-      if (e.charge > 0) { sp *= 3.2; e.charge -= dt * (BPM / 60); }
+      if (e.charge > 0) { sp *= 3.2; e.charge -= dt * (this.currentBpm() / 60); }
       e.x += (dx / d) * sp * dt + e.kbx * dt;
       e.y += (dy / d) * sp * dt + e.kby * dt;
       e.kbx *= Math.max(0, 1 - dt * 6);
@@ -323,7 +396,15 @@ class Game {
     if (e.type === 'boss') {
       this.bossRef = null;
       this.emit('bossdead');
-      this.finish('clear');
+      if (this.isEndless()) {
+        this.groove = GROOVE_MAX;
+        this.stats.maxGroove = Math.max(this.stats.maxGroove, this.groove);
+        const bonus = xpForLevel(this.level);
+        this.addXp(bonus);
+        this.emit('bossreward', { groove: this.groove, xp: bonus, rank: this.bossSpawns });
+      } else {
+        this.finish('clear');
+      }
     }
   }
 
@@ -550,8 +631,20 @@ class Game {
 
   finish(result) {
     this.state = result;
+    const bpm = this.currentBpm();
+    let bestTime = 0;
+    if (this.isEndless()) {
+      try {
+        bestTime = Number(localStorage.getItem(ENDLESS_BEST_KEY) || 0);
+        if (this.time > bestTime) {
+          bestTime = Math.floor(this.time);
+          localStorage.setItem(ENDLESS_BEST_KEY, String(bestTime));
+        }
+      } catch (_) {}
+    }
     this.emit(result, {
       time: Math.round(this.time), level: this.level, kills: this.kills,
+      mode: this.mode, score: this.score(), bpm: Math.round(bpm), bestTime,
       ...this.stats,
     });
   }
@@ -560,15 +653,19 @@ class Game {
   getSnapshot() {
     return {
       state: this.state,
+      mode: this.mode,
       time: Math.round(this.time * 100) / 100,
       beat: Math.round(this.beat * 100) / 100,
-      beatOffsetMs: Math.round((this.beat - Math.round(this.beat)) * BEAT_MS),
+      bpm: Math.round(this.currentBpm() * 100) / 100,
+      beatOffsetMs: Math.round((this.beat - Math.round(this.beat)) * this.currentBeatMs()),
       hp: Math.round(this.p.hp), maxHp: this.p.maxHp,
       pos: { x: Math.round(this.p.x), y: Math.round(this.p.y) },
       level: this.level, xp: this.xp, xpNext: xpForLevel(this.level),
       groove: this.groove, grooveMult: Math.round(this.grooveMult() * 100) / 100,
       tier: this.tier(), accent: this.isAccent(),
       kills: this.kills, stats: { ...this.stats },
+      score: this.score(), spawnRate: Math.round(spawnRate(this.time) * 100) / 100,
+      bossSpawns: this.bossSpawns, nextBossTime: this.nextBossTime,
       enemies: this.enemies.length, bullets: this.bullets.length, gems: this.gems.length,
       weapons: { ...this.weapons }, passives: { ...this.passives },
       boss: this.bossRef ? { hp: Math.round(this.bossRef.hp), x: Math.round(this.bossRef.x), y: Math.round(this.bossRef.y) } : null,
