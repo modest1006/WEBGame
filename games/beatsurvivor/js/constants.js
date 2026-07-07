@@ -139,7 +139,11 @@ function defaultBeatSurvivorSave() {
   return {
     version: 1,
     best: { normalTime: 0, endlessTime: 0 },
-    settings: { screenShake: true, reducedFlash: false },
+    settings: {
+      screenShake: true,
+      reducedFlash: false,
+      volumes: { bgm: 1, sfx: 1, judge: 1 },
+    },
   };
 }
 
@@ -155,6 +159,11 @@ function normalizeBeatSurvivorSave(data) {
     settings: {
       screenShake: data.settings?.screenShake !== false,
       reducedFlash: data.settings?.reducedFlash === true,
+      volumes: {
+        bgm: Math.max(0, Math.min(1, Number(data.settings?.volumes?.bgm ?? 1))),
+        sfx: Math.max(0, Math.min(1, Number(data.settings?.volumes?.sfx ?? 1))),
+        judge: Math.max(0, Math.min(1, Number(data.settings?.volumes?.judge ?? 1))),
+      },
     },
   };
 }

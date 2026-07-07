@@ -46,9 +46,21 @@ function modeSelectHtml() {
 }
 
 function settingsHtml() {
+  const volumes = game.settings.volumes ?? { bgm: 1, sfx: 1, judge: 1 };
+  const slider = (key, label) => {
+    const value = Math.round(Math.max(0, Math.min(1, Number(volumes[key] ?? 1))) * 100);
+    return `<label class="volume-row"><span>${label}</span>`
+      + `<input class="volume-slider" type="range" min="0" max="100" value="${value}" data-volume="${key}">`
+      + `<b>${value}</b></label>`;
+  };
   return '<div class="settings-panel">'
     + `<button class="setting-toggle" data-setting="screenShake">SHAKE <b>${game.settings.screenShake ? 'ON' : 'OFF'}</b></button>`
     + `<button class="setting-toggle" data-setting="reducedFlash">FLASH <b>${game.settings.reducedFlash ? 'LOW' : 'FULL'}</b></button>`
+    + '<div class="volume-panel">'
+    + slider('bgm', 'BGM')
+    + slider('sfx', 'SFX')
+    + slider('judge', 'JUDGE')
+    + '</div>'
     + '</div>';
 }
 
@@ -131,15 +143,20 @@ function onBeatUI() {
 game.on((type, data) => {
   renderer.handleEvent(type, data, game);
   switch (type) {
+    case 'start': music.setBossMode(false); break;
     case 'beat': onBeatUI(); break;
     case 'dash': music.sfx(data.judge, data); break;
     case 'maxgroove': music.sfx('maxgroove', data); break;
+    case 'bossdead': music.setBossMode(false); break;
     case 'bossdefeat-explode': music.sfx('bossboom', data); break;
     case 'deathstart': music.sfx('hurt'); break;
     case 'kill': music.sfx('kill'); break;
     case 'hurt': music.sfx('hurt'); break;
     case 'gem': music.sfx('gem'); break;
-    case 'boss': music.sfx('boss'); break;
+    case 'boss':
+      music.setBossMode(true);
+      music.sfx('boss');
+      break;
     case 'levelup-open':
       music.sfx('levelup');
       renderLevelup(data.choices);
@@ -205,6 +222,19 @@ overlay.addEventListener('pointerdown', (e) => {
   saveSettings();
   syncOverlay();
 });
+overlay.addEventListener('input', (e) => {
+  const slider = e.target.closest('[data-volume]');
+  if (!slider) return;
+  const value = Math.max(0, Math.min(100, Number(slider.value) || 0));
+  music.setVolume(slider.dataset.volume, value / 100);
+  const readout = slider.parentElement?.querySelector('b');
+  if (readout) readout.textContent = String(Math.round(value));
+  saveSettings();
+});
+overlay.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest('[data-volume]')) return;
+  e.stopImmediatePropagation();
+});
 overlay.addEventListener('pointerdown', (e) => { e.preventDefault(); actions.anyInput(); });
 window.addEventListener('resize', () => renderer.resize());
 document.addEventListener('visibilitychange', () => {
@@ -214,6 +244,17 @@ document.addEventListener('visibilitychange', () => {
     syncOverlay();
   }
 });
+
+window.__music = {
+  getPhraseLog: () => music.phraseLog.slice(),
+  getVolumes: () => music.getVolumes(),
+  setVolume: (kind, value) => {
+    const applied = music.setVolume(kind, value);
+    saveSettings();
+    return applied;
+  },
+  setBossMode: (on) => music.setBossMode(on),
+};
 
 // HUD
 const hud = {
