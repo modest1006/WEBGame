@@ -78,6 +78,14 @@ games/<game-name>/
 - `touch-action: none` や `preventDefault` でスクロール/ダブルタップズームの誤爆を防ぐ
 - viewport メタタグ必須。モバイル縦画面レイアウトを `preview_resize`（mobile）で必ず確認する
 
+## Canvas 2D のパフォーマンス
+
+- **エンティティ単位の `shadowBlur` / radial gradient 描画は禁止**（数百個で桁違いに遅くなる。PETRIで100フレーム2分超の実例）。グローは「低解像度オフスクリーンに描く→拡大して `lighter` で1回合成」の定数コスト方式で
+- セル/タイル状の大量描画は `ImageData`＋`putImageData`→`imageSmoothingEnabled=false` 拡大
+- 静的な背景・枠・ビネットはオフスクリーンに1回描いてキャッシュ、毎フレームは drawImage 1回
+- 更新頻度の分離: 盤面が変わった時だけ重い層を再構築し、rAF毎は軽いオーバーレイのみ
+- タッチ端末は devicePixelRatio を1.0〜1.5に制限
+
 ## 3Dゲーム（Three.js）
 
 - `file://` 直開き規約と両立させるため、**Three.js r147のUMDビルド（three.min.js）をゲーム内 `lib/` に同梱**して通常scriptで読む（グローバル`THREE`が生える）。r148以降はESM専用なので使わない。CDN参照はオフラインで死ぬため不可
