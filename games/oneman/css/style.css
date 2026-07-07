@@ -3,12 +3,12 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 button { font: inherit; }
 #shell { position: relative; width: 100vw; height: 100vh; background: linear-gradient(#a9d2ed, #d8e5df 58%, #7c8c70); overflow: hidden; }
 #view { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#top-led { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: min(780px, 72vw); height: 38px; overflow: hidden; border: 2px solid #272727; background: #050505; color: #ff9d1d; box-shadow: inset 0 0 14px rgba(255, 135, 10, .2); font-weight: 800; letter-spacing: 3px; line-height: 34px; white-space: nowrap; }
+#top-led { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: min(780px, 72vw); height: 38px; overflow: hidden; border: 2px solid #272727; background: #050505; color: #ff9d1d; box-shadow: inset 0 0 14px rgba(255, 135, 10, .2); font-weight: 800; letter-spacing: 3px; line-height: 34px; white-space: nowrap; transition: opacity .4s; }
 #top-led span { display: inline-block; padding-left: 100%; animation: led-scroll 12s linear infinite; }
 body.departing #top-led span { animation: led-scroll 4.2s cubic-bezier(.15,.8,.2,1) 1; }
 @keyframes led-scroll { to { transform: translateX(-100%); } }
 
-#speed-meter { position: absolute; left: 22px; bottom: 22px; width: 190px; height: 190px; }
+#speed-meter { position: absolute; left: 22px; bottom: 22px; width: 190px; height: 190px; transition: opacity .4s; }
 .dial { position: relative; width: 100%; height: 100%; border-radius: 50%; background: radial-gradient(circle at 50% 55%, #1e2225 0 38%, #050607 39% 100%); border: 8px solid #202226; box-shadow: 0 8px 26px rgba(0,0,0,.45), inset 0 0 18px rgba(255,255,255,.08); }
 .ticks { position: absolute; inset: 16px; border-radius: 50%; background: repeating-conic-gradient(from -130deg, #f7f7f0 0 1deg, transparent 1deg 10deg); mask: radial-gradient(circle, transparent 0 65%, #000 66%); }
 #speed-needle { position: absolute; left: 50%; top: 50%; width: 4px; height: 68px; margin-left: -2px; margin-top: -62px; background: #e32727; transform-origin: 50% 62px; border-radius: 6px; box-shadow: 0 0 8px rgba(255,0,0,.7); transition: transform .12s linear; }
@@ -16,16 +16,16 @@ body.departing #top-led span { animation: led-scroll 4.2s cubic-bezier(.15,.8,.2
 #speed-text { position: absolute; left: 0; right: 0; bottom: 42px; text-align: center; color: #f1f5ef; font-size: 34px; font-family: Consolas, monospace; letter-spacing: 2px; }
 .dial small { position: absolute; left: 0; right: 0; bottom: 25px; text-align: center; color: #b9c0c0; font-size: 12px; }
 
-#distance-board { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); min-width: 280px; padding: 9px 22px; text-align: center; background: #120906; border: 2px solid #342016; color: #ff9b24; font: 800 30px Consolas, monospace; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255,128,0,.65); }
+#distance-board { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); min-width: 280px; padding: 9px 22px; text-align: center; background: #120906; border: 2px solid #342016; color: #ff9b24; font: 800 30px Consolas, monospace; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255,128,0,.65); transition: opacity .4s; }
 #distance-board.overrun { color: #ff342c; border-color: #6b1512; text-shadow: 0 0 10px rgba(255,0,0,.8); }
-#final-panel { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); opacity: 0; transition: opacity .18s; pointer-events: none; }
+#final-panel { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); opacity: 0; transition: opacity .4s; pointer-events: none; }
 #final-panel.show { opacity: 1; }
 #final-counter { display: block; min-width: 260px; text-align: center; font: 900 64px Consolas, monospace; color: #fff; text-shadow: 0 3px 18px rgba(0,0,0,.85); }
 #final-counter.warn { color: #ffe55e; }
 #final-counter.danger { color: #ff3b2f; animation: pulse .32s alternate infinite; }
 @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.045); } }
 
-#brake-lever { position: absolute; right: 18px; top: 70px; bottom: 28px; width: 112px; border: 2px solid rgba(255,255,255,.35); background: rgba(15,18,20,.76); box-shadow: 0 8px 30px rgba(0,0,0,.4); user-select: none; touch-action: none; }
+#brake-lever { position: absolute; right: 18px; top: 70px; bottom: 28px; width: 112px; border: 2px solid rgba(255,255,255,.35); background: rgba(15,18,20,.76); box-shadow: 0 8px 30px rgba(0,0,0,.4); user-select: none; touch-action: none; transition: opacity .4s; }
 #brake-lever .rail { position: absolute; left: 45px; top: 7%; bottom: 7%; width: 12px; border-radius: 10px; background: linear-gradient(90deg, #333, #aaa, #333); }
 #lever-knob { position: absolute; left: 51px; top: 8%; width: 44px; height: 30px; transform: translate(-50%, -50%); border-radius: 6px; background: linear-gradient(#e8e8e0, #8d8e8b); border: 2px solid #202020; box-shadow: 0 5px 12px rgba(0,0,0,.55); transition: top .08s steps(1), transform .08s; }
 .scale { position: absolute; inset: 4% 6px 4% 64px; display: grid; grid-template-rows: repeat(10, 1fr); align-items: center; font: 800 13px Consolas, monospace; }
@@ -62,9 +62,27 @@ body:not(.title) #title-panel { opacity: 0; visibility: hidden; pointer-events: 
 #title-panel p { margin: 0 auto 22px; max-width: 640px; color: #e5e2d8; font-weight: 700; }
 #title-panel button { width: 180px; height: 48px; margin: 0 auto; border: 2px solid #fff; background: #111; color: #fff; font-weight: 900; cursor: pointer; }
 
-#mini-debug { position: absolute; left: 14px; top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; max-width: calc(100vw - 160px); color: #eee; font: 700 11px Consolas, monospace; text-shadow: 0 1px 6px #000; }
+#mini-debug { position: absolute; left: 14px; top: 12px; display: none; gap: 8px; align-items: center; flex-wrap: wrap; max-width: calc(100vw - 160px); color: #eee; font: 700 11px Consolas, monospace; text-shadow: 0 1px 6px #000; transition: opacity .4s; }
+body.debug-mode #mini-debug { display: flex; }
 #mini-debug span { padding: 4px 6px; background: rgba(0,0,0,.45); }
-#mini-debug button { height: 24px; border: 1px solid #aaa; background: rgba(0,0,0,.55); color: #fff; font-size: 11px; }
+#utility-controls { position: absolute; top: 12px; right: 12px; display: flex; gap: 8px; z-index: 8; opacity: .78; transition: opacity .4s; }
+#utility-controls:hover, #utility-controls:focus-within, body:not(.settings-idle) #utility-controls { opacity: .92; }
+body.settings-idle #utility-controls { opacity: .15; }
+#utility-controls button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.42); border-radius: 50%; background: rgba(0,0,0,.36); color: #fff; font: 900 15px Consolas, monospace; text-shadow: 0 1px 5px #000; cursor: pointer; backdrop-filter: blur(4px); }
+#horn-touch { position: absolute; right: 140px; bottom: 34px; width: 58px; height: 58px; display: grid; place-items: center; border: 2px solid rgba(255,255,255,.42); border-radius: 50%; background: rgba(0,0,0,.34); color: #fff; font: 900 23px Consolas, monospace; text-shadow: 0 1px 6px #000; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 7; }
+body.approach #horn-touch, body.final #horn-touch { opacity: .42; pointer-events: auto; }
+body.approach #horn-touch:hover, body.final #horn-touch:hover, #horn-touch:active { opacity: .82; }
+#letterbox { position: absolute; inset: 0; z-index: 6; pointer-events: none; opacity: 0; transition: opacity .4s; }
+#letterbox:before, #letterbox:after { content: ""; position: absolute; left: 0; right: 0; height: 12vh; background: #020202; }
+#letterbox:before { top: 0; transform: translateY(-100%); transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+#letterbox:after { bottom: 0; transform: translateY(100%); transition: transform .4s cubic-bezier(.2,.8,.2,1); }
+#letterbox span { position: absolute; right: 24px; bottom: calc(12vh + 16px); color: rgba(255,255,255,.72); font-size: 13px; font-weight: 800; letter-spacing: 1px; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity .4s .12s; }
+body.cruise #letterbox { opacity: 1; }
+body.cruise #letterbox:before, body.cruise #letterbox:after { transform: translateY(0); }
+body.cruise #letterbox span { opacity: 1; }
+body.cruise #top-led, body.cruise #speed-meter, body.cruise #distance-board, body.cruise #final-panel, body.cruise #brake-lever, body.cruise #mini-debug, body.cruise #utility-controls, body.cruise #horn-touch { opacity: 0 !important; pointer-events: none !important; }
+body.departing #mini-debug { display: none; }
+body.title #utility-controls, body.title #horn-touch { opacity: 0; pointer-events: none; }
 #transition { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
 #transition.fade { background: #000; }
 #transition.fade:after { content: ""; position: absolute; left: -30%; top: 50%; width: 40%; height: 4px; background: #fff; opacity: .9; transform: translateY(-50%); animation: station-line .35s ease-out; }
@@ -86,7 +104,9 @@ body:not(.title) #title-panel { opacity: 0; visibility: hidden; pointer-events: 
   #speed-text { font-size: 24px; bottom: 30px; }
   .dial small { bottom: 17px; }
   #brake-lever { width: 92px; right: 8px; top: 56px; bottom: 8px; }
+  #horn-touch { right: 110px; bottom: 20px; width: 50px; height: 50px; font-size: 20px; }
   #distance-board { top: 55px; font-size: 22px; min-width: 210px; }
   #final-counter { font-size: 44px; min-width: 190px; }
   #top-led { height: 30px; line-height: 26px; width: 72vw; font-size: 13px; }
+  #letterbox span { right: 14px; bottom: calc(12vh + 10px); }
 }
