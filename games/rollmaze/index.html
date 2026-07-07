@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>コロコロ迷路 ROLL MAZE</title>
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+  <main class="shell">
+    <canvas id="view" aria-label="ROLL MAZE 3D game canvas"></canvas>
+    <header class="hud">
+      <section class="brand">
+        <b>ROLL MAZE</b>
+        <span id="hud-name">Stage</span>
+      </section>
+      <section class="stat-grid">
+        <div class="stat"><span>STAGE</span><b id="hud-stage">1 / 8</b></div>
+        <div class="stat"><span>TIME</span><b id="hud-time">0.00s</b></div>
+        <div class="stat"><span>PAR</span><b id="hud-par">18s</b></div>
+        <div class="stat"><span>FALL</span><b id="hud-falls">0</b></div>
+      </section>
+      <section class="controls">
+        <button id="mute-btn" type="button">SOUND</button>
+        <button id="restart-btn" type="button">RESTART</button>
+      </section>
+    </header>
+    <div class="tilt-box" aria-hidden="true"><div id="tilt-dot"></div></div>
+    <section id="overlay" class="overlay">
+      <div class="overlay-panel">
+        <h1 id="overlay-title">ROLL MAZE</h1>
+        <p id="overlay-sub">ステージを選択してください</p>
+        <div id="result-line"></div>
+        <div class="overlay-actions">
+          <button id="play-btn" type="button">PLAY / NEXT</button>
+          <button id="select-btn" type="button">STAGE SELECT</button>
+        </div>
+        <div id="stage-list"></div>
+      </div>
+    </section>
+  </main>
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+
+  <script src="lib/three.min.js?v=1"></script>
+  <script src="js/constants.js?v=1"></script>
+  <script src="js/rng.js?v=1"></script>
+  <script src="js/game.js?v=1"></script>
+  <script src="js/renderer.js?v=1"></script>
+  <script src="js/input.js?v=1"></script>
+  <script src="js/audio.js?v=1"></script>
+  <script src="js/debug.js?v=1"></script>
+  <script src="js/main.js?v=1"></script>
+</body>
+</html>

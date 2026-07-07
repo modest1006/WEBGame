@@ -1,0 +1,228 @@
+html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #141b2e;
+  color: #fff6e4;
+  font-family: "Segoe UI", "Noto Sans JP", system-ui, sans-serif;
+  touch-action: none;
+}
+button {
+  font: inherit;
+}
+.shell {
+  position: fixed;
+  inset: 0;
+  background: #141b2e;
+}
+#view {
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+}
+.hud {
+  position: fixed;
+  inset: 16px 16px auto 16px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: start;
+  pointer-events: none;
+}
+.brand, .stat, .tilt-box, .controls {
+  background: rgba(22, 22, 30, 0.62);
+  border: 1px solid rgba(255, 231, 184, 0.28);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(8px);
+}
+.brand {
+  padding: 10px 12px;
+  min-width: 156px;
+}
+.brand b {
+  display: block;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+.brand span, .stat span {
+  display: block;
+  color: #f2d9a8;
+  font-size: 11px;
+}
+.stat-grid {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.stat {
+  min-width: 78px;
+  padding: 9px 10px;
+  text-align: center;
+}
+.stat b {
+  font-size: 18px;
+}
+.controls {
+  pointer-events: auto;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+}
+.controls button, .overlay button, .stage-card {
+  border: 1px solid rgba(255, 239, 202, 0.34);
+  border-radius: 8px;
+  background: rgba(111, 74, 39, 0.82);
+  color: #fff6e4;
+  padding: 9px 11px;
+  cursor: pointer;
+}
+.controls button:hover, .overlay button:hover, .stage-card:hover:not(:disabled) {
+  background: rgba(145, 93, 45, 0.95);
+}
+.tilt-box {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: 82px;
+  height: 82px;
+  pointer-events: none;
+}
+.tilt-box:before, .tilt-box:after {
+  content: "";
+  position: absolute;
+  background: rgba(255,255,255,0.18);
+}
+.tilt-box:before {
+  left: 40px;
+  top: 10px;
+  width: 1px;
+  height: 62px;
+}
+.tilt-box:after {
+  left: 10px;
+  top: 40px;
+  width: 62px;
+  height: 1px;
+}
+#tilt-dot {
+  position: absolute;
+  left: 34px;
+  top: 34px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #69ffd5;
+  box-shadow: 0 0 18px #69ffd5;
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, rgba(9, 13, 25, 0.55), rgba(9, 13, 25, 0.82));
+  pointer-events: auto;
+}
+.overlay.hidden {
+  display: none;
+}
+.overlay-panel {
+  width: min(720px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  overflow: auto;
+  padding: 22px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 239, 202, 0.34);
+  background: rgba(35, 27, 24, 0.76);
+  box-shadow: 0 24px 80px rgba(0,0,0,0.38);
+}
+.overlay h1 {
+  margin: 0;
+  font-size: clamp(34px, 7vw, 68px);
+  line-height: 0.95;
+}
+.overlay p {
+  margin: 10px 0 16px;
+  color: #ffe8ba;
+}
+.overlay-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+#stage-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.stage-card {
+  min-height: 76px;
+  text-align: left;
+}
+.stage-card:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+.stage-card b {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.28);
+}
+.stage-card span, .stage-card small {
+  display: block;
+}
+.stage-card small {
+  margin-top: 6px;
+  color: #f2d9a8;
+}
+#result-line {
+  min-height: 20px;
+  font-weight: 700;
+}
+.debug-overlay {
+  position: fixed;
+  left: 10px;
+  bottom: 10px;
+  z-index: 20;
+  max-width: min(680px, calc(100vw - 20px));
+  max-height: 45vh;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.72);
+  color: #b7ffcf;
+  font: 12px/1.35 Consolas, monospace;
+  pointer-events: none;
+}
+.hidden {
+  display: none;
+}
+@media (max-width: 720px) {
+  .hud {
+    inset: 8px 8px auto 8px;
+    grid-template-columns: 1fr auto;
+  }
+  .brand {
+    grid-column: 1 / -1;
+  }
+  .stat-grid {
+    justify-content: start;
+    overflow-x: auto;
+  }
+  .stat {
+    min-width: 62px;
+  }
+  .controls {
+    flex-direction: column;
+  }
+  #stage-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

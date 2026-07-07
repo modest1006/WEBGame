@@ -32,6 +32,12 @@
       "port": 8128
     },
     {
+      "name": "rollmaze",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8129", "--directory", "games/rollmaze"],
+      "port": 8129
+    },
+    {
       "name": "bunnyhop",
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8124", "--directory", "games/bunnyhop"],
