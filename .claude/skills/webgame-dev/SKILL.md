@@ -91,6 +91,7 @@ games/<game-name>/
 - `file://` 直開き規約と両立させるため、**Three.js r147のUMDビルド（three.min.js）をゲーム内 `lib/` に同梱**して通常scriptで読む（グローバル`THREE`が生える）。r148以降はESM専用なので使わない。CDN参照はオフラインで死ぬため不可
 - ロジック（物理・判定）は従来どおり `game.js` にThree非依存で実装し、renderer.jsだけがTHREEを触る。これで `__game.step()` によるヘッドレス検証がそのまま効く
 - `WebGLRenderer` は `preserveDrawingBuffer: true` で生成する（ヘッドレス検証の `canvas.toDataURL` に必須）
+- **カメラのnear/far・フォグのnear/farは必ずシーンスケール（カメラ距離）から導出する**。固定値だと「シーンはあるのに真っ黒」事故になる（BUBBLE EXで far=200/フォグ260 vs カメラ距離855 の全没が実際に起きた）。「draw callsは出ているのに画面が背景色一色」はフォグ沈没を第一に疑う
 - モバイルは `pixelRatio` 上限1.5・影テクスチャ1024以下に抑える
 
 ## セルフレビューの必須経路

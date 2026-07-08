@@ -78,6 +78,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8123", "--directory", "games/tetris"],
       "port": 8123
+    },
+    {
+      "name": "bubbleex",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8135", "--directory", "games/bubbleex"],
+      "port": 8135
     }
   ]
 }

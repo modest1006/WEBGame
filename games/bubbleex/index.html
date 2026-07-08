@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>BUBBLE BLASTER EX</title>
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+  <div class="cabinet">
+    <div class="bezel">
+      <div class="screw tl"></div><div class="screw tr"></div>
+      <div class="screw bl"></div><div class="screw br"></div>
+      <div class="marquee"><span class="logo">BUBBLE BLASTER <span class="ex">EX</span></span></div>
+      <div class="screen-wrap">
+        <canvas id="view" aria-label="BUBBLE BLASTER EX game canvas"></canvas>
+        <div class="scanlines" id="scanlines"></div>
+        <div class="vignette"></div>
+
+        <div class="hud">
+          <div class="hud-box">
+            <span class="lbl">SCORE</span>
+            <span class="val" id="hud-score">0</span>
+          </div>
+          <div class="hud-box">
+            <span class="lbl">STAGE</span>
+            <span class="val" id="hud-stage">1 / 8</span>
+          </div>
+          <div class="hud-box hud-next">
+            <div>
+              <span class="lbl">NEXT</span>
+              <div class="next-swatch" id="hud-next-swatch"></div>
+            </div>
+          </div>
+          <div class="hud-box">
+            <span class="lbl">BEST</span>
+            <span class="val" id="hud-best">0</span>
+          </div>
+        </div>
+
+        <div class="controls-bar">
+          <button class="icon-btn" id="mute-btn" type="button" title="ミュート (M)">🔊</button>
+          <button class="icon-btn" id="pause-btn" type="button" title="ポーズ (P)">⏸</button>
+          <button class="icon-btn" id="restart-btn" type="button" title="リスタート (R)">↺</button>
+        </div>
+
+        <div class="cutin" id="cutin">
+          <div class="cutin-band"><span id="cutin-text">READY... GO!!</span></div>
+        </div>
+
+        <section class="overlay" id="overlay">
+          <div>
+            <h1 class="overlay-title" id="overlay-title">BUBBLE BLASTER EX</h1>
+            <p class="overlay-sub" id="overlay-sub">壁で反射させて同色3つを繋げて消せ！</p>
+            <div class="push-start" id="push-start">PUSH START</div>
+            <div class="result-line" id="result-line"></div>
+            <div>
+              <button id="start-btn" type="button">START</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+
+  <script src="lib/three.min.js?v=1"></script>
+  <script src="js/constants.js?v=1"></script>
+  <script src="js/rng.js?v=1"></script>
+  <script src="js/game.js?v=1"></script>
+  <script src="js/renderer.js?v=1"></script>
+  <script src="js/input.js?v=1"></script>
+  <script src="js/audio.js?v=1"></script>
+  <script src="js/debug.js?v=1"></script>
+  <script src="js/main.js?v=1"></script>
+</body>
+</html>
