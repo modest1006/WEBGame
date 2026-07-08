@@ -92,6 +92,8 @@ games/<game-name>/
 - ロジック（物理・判定）は従来どおり `game.js` にThree非依存で実装し、renderer.jsだけがTHREEを触る。これで `__game.step()` によるヘッドレス検証がそのまま効く
 - `WebGLRenderer` は `preserveDrawingBuffer: true` で生成する（ヘッドレス検証の `canvas.toDataURL` に必須）
 - **カメラのnear/far・フォグのnear/farは必ずシーンスケール（カメラ距離）から導出する**。固定値だと「シーンはあるのに真っ黒」事故になる（BUBBLE EXで far=200/フォグ260 vs カメラ距離855 の全没が実際に起きた）。「draw callsは出ているのに画面が背景色一色」はフォグ沈没を第一に疑う
+- **同じ座標変換を使うオブジェクトは同じ親Groupのオフセット下に置く**。盤面を `boardGroup`（原点合わせのpositionオフセット付き）に入れているのに、パーティクル/破片/落下ゴーストを別の無オフセットGroupに入れると、同じ `toScene()` で計算しても `(+W/2, -H/2)` ぶんズレて湧く。デスクトップでは画面内でも、モバイル縦だと画面外に飛んで「演出が出ない」に化ける（BUBBLE EX v3で実際に発生）。→ 演出用Groupは `particleGroup.position.copy(boardGroup.position)` で必ず揃える
+- **背景を「全オブジェクトに対して確実に最背面」にするなら二段描画**。大きく傾けた床plane等は、手前側の辺がプレイ面(Z=0)より前（正のZ）に飛び出して前景の玉を隠すことがある（BUBBLE EX v3: 700四方・-69°の床の near辺がZ≈+167まで前進し最下部の玉を occlude）。Zの調整で対処すると脆いので、`autoClear=false`＋パス1で背景のみ描画→`clearDepth()`→パス2で前景を描く二段構成にすると、Z重なりに関係なく背景が必ず後ろになる（`group.visible` トグルで1シーンのまま実現可）
 - モバイルは `pixelRatio` 上限1.5・影テクスチャ1024以下に抑える
 
 ## セルフレビューの必須経路
