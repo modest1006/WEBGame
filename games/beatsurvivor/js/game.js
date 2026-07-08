@@ -382,7 +382,7 @@ class Game {
       hp: (def.hp + def.hpGrow * minutes) * hpScale,
       maxHp: (def.hp + def.hpGrow * minutes) * hpScale,
       dmg: def.dmg, xp: def.xp, speed: def.speed * speedScale,
-      kbx: 0, kby: 0, flash: 0, charge: 0,
+      kbx: 0, kby: 0, flash: 0, charge: 0, stun: 0,
     };
     this.enemies.push(e);
     return e;
@@ -454,8 +454,15 @@ class Game {
     const beatPulse = Math.max(0, 1 - (this.beat % 1) * 3); // ビート直後に加速（脈動）
     for (const e of this.enemies) {
       e.flash = Math.max(0, e.flash - dt);
+      e.stun = Math.max(0, (e.stun || 0) - dt);
       const dx = p.x - e.x, dy = p.y - e.y;
       const d = Math.hypot(dx, dy) || 1;
+      if (e.stun > 0) {
+        e.x += e.kbx * dt; e.y += e.kby * dt;
+        e.kbx *= Math.max(0, 1 - dt * 4);
+        e.kby *= Math.max(0, 1 - dt * 4);
+        continue;
+      }
       let sp = e.speed * (1 + 0.35 * beatPulse);
       if (e.charge > 0) { sp *= 3.2; e.charge -= dt * (this.currentBpm() / 60); }
       e.x += (dx / d) * sp * dt + e.kbx * dt;
@@ -691,12 +698,12 @@ class Game {
     const conf = WEAPONS.nova.lv[this.weapons.nova - 1];
     const accent = this.isAccent();
     const radius = conf.radius * (1 + this.gearLv('bass_reflex') * 0.1);
-    this.areaDamage(this.p.x, this.p.y, radius, conf.dmg * this.attackMult(), 140);
+    this.areaDamage(this.p.x, this.p.y, radius, conf.dmg * 1.3 * this.attackMult(), 190);
     this.emit('nova', { radius, accent });
     if (this.tier() >= 2) {
       this.echoQueue.push({
         at: this.halfTick + 1, x: this.p.x, y: this.p.y,
-        radius: radius * 0.8, dmg: conf.dmg * 0.6 * this.attackMult(), kb: 100,
+        radius: radius * 0.8, dmg: conf.dmg * 0.6 * 1.3 * this.attackMult(), kb: 140,
       });
     }
   }
@@ -705,7 +712,7 @@ class Game {
     const conf = WEAPONS.bass.lv[this.weapons.bass - 1];
     const tier = this.tier();
     const accent = this.isAccent();
-    const arc = conf.arc * (tier >= 1 ? 1.2 : 1);     // ティア1+: 幅+20%
+    const arc = conf.arc * (tier >= 1 ? 1.25 : 1);     // ティア1+: 幅+25%
     const range = conf.range * (tier >= 3 ? 1.3 : 1); // ティア3+: 射程+30%
     const p = this.p;
     const dir = p.facing;
@@ -717,10 +724,11 @@ class Game {
       while (da > Math.PI) da -= Math.PI * 2;
       while (da < -Math.PI) da += Math.PI * 2;
       if (Math.abs(da) <= arc / 2) {
-        this.damageEnemy(e, conf.dmg * this.attackMult(), (dx / d) * conf.kb, (dy / d) * conf.kb);
+        e.stun = Math.max(e.stun || 0, this.currentBeatMs() / 1000 * 0.5);
+        this.damageEnemy(e, conf.dmg * 1.4 * this.attackMult(), (dx / d) * conf.kb * 1.55, (dy / d) * conf.kb * 1.55);
       }
     }
-    this.emit('bass', { dir, range, arc, accent });
+    this.emit('bass', { dir, range, arc, accent, heavy: true });
   }
 
   // GROOVEティアを反映したレーザー構成（描画側もこれを使う）
@@ -879,13 +887,22 @@ class Game {
   finish(result) {
     this.state = result;
     const bpm = this.currentBpm();
-    const chipBreakdown = calculateChipReward({
+    const baseChipBreakdown = calculateChipReward({
       kills: this.kills,
       maxGroove: this.stats.maxGroove,
       bossRankSum: this.stats.bossRankSum,
       time: this.time,
     });
-    const unlocked = this.achievementsForResult(result);
+    const candidates = this.achievementsForResult(result);
+    const previousMeta = normalizeMeta(loadBeatSurvivorSave().meta);
+    const unlocked = candidates.filter((id) => !previousMeta.achievements.includes(id));
+    const chipBreakdown = { ...baseChipBreakdown };
+    if (previousMeta.achievements.includes('stage_clear')) {
+      chipBreakdown.bonus = Math.floor(baseChipBreakdown.total * 0.1);
+      chipBreakdown.total += chipBreakdown.bonus;
+    } else {
+      chipBreakdown.bonus = 0;
+    }
     const save = updateBeatSurvivorSave((s) => {
       if (this.isEndless() && result === 'dead') s.best.endlessTime = Math.max(s.best.endlessTime || 0, Math.floor(this.time));
       if (!this.isEndless() && result === 'clear') s.best.normalTime = Math.max(s.best.normalTime || 0, Math.floor(this.time));

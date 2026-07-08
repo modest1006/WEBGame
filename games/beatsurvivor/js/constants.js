@@ -147,11 +147,11 @@ const META_GEAR = [
 ];
 
 const ACHIEVEMENTS = [
-  { id: 'stage_clear', name: '初ステージクリア', reward: 'ENDLESSモード解放' },
+  { id: 'stage_clear', name: '初ステージクリア', reward: 'チップボーナス +10%' },
   { id: 'groove_max', name: 'GROOVE MAX到達', reward: 'タイトルBGMレイヤー追加' },
   { id: 'endless_5', name: 'エンドレス5:00', reward: '機体色バリエーション' },
-  { id: 'night_rider', name: 'エンドレス10:00', reward: 'NIGHT RIDER称号' },
-  { id: 'boss_triple', name: 'ボス3周回撃破', reward: '隠し色' },
+  { id: 'night_rider', name: 'エンドレス10:00', reward: 'NIGHT RIDER称号＋レインボートレイル' },
+  { id: 'boss_triple', name: 'ボス3周回撃破', reward: 'ボス隠し色' },
   { id: 'rack_complete', name: 'サウンドシステム完成', reward: 'ラック完成ランプ' },
 ];
 

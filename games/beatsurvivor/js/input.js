@@ -112,9 +112,8 @@ class Input {
       btn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.actions.anyInput();
         const act = btn.dataset.action;
-        if (act === 'pause') this.actions.pause();
+        if (act === 'pause') { this.actions.anyInput(); this.actions.pause(); }
         else if (act === 'mute') this.actions.mute();
         else if (act === 'restart') this.actions.restart();
       });

@@ -47,18 +47,32 @@ class Renderer {
           life: 0.18, age: 0, color: data.accent ? '#ffd23e' : '#ffe9b0', w: data.accent ? 3.5 : 2,
         });
         break;
-      case 'nova':
+      case 'nova': {
+        const x = data.echo ? this.lastNovaX ?? p.x : p.x;
+        const y = data.echo ? this.lastNovaY ?? p.y : p.y;
         this.rings.push({
-          x: data.echo ? this.lastNovaX ?? p.x : p.x, y: data.echo ? this.lastNovaY ?? p.y : p.y,
-          r: 30, max: data.radius, life: 0.35, age: 0,
-          color: data.echo ? 'rgba(59,232,240,0.6)' : (data.accent ? '#ffd23e' : '#3be8f0'),
-          w: data.accent ? 8 : 5,
+          x, y, r: 22, max: data.radius, life: 0.32, age: 0,
+          color: data.echo ? 'rgba(240,77,216,0.45)' : (data.accent ? '#ffd23e' : '#f04dd8'),
+          w: data.accent ? 7 : 5,
+          style: 'spike',
         });
+        for (let i = 0; i < 24; i++) {
+          const a = (Math.PI * 2 * i) / 24;
+          const sp = 160 + Math.random() * 170;
+          this.particles.push({
+            x, y,
+            vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+            life: 0.22 + Math.random() * 0.18, age: 0,
+            size: 2 + Math.random() * 2.5,
+            color: i % 3 === 0 ? '#ffd23e' : '#f04dd8',
+          });
+        }
         if (!data.echo) { this.lastNovaX = p.x; this.lastNovaY = p.y; }
         break;
+      }
       case 'bass':
-        this.cones.push({ x: p.x, y: p.y, dir: data.dir, range: data.range, arc: data.arc, age: 0, life: 0.28, accent: data.accent });
-        this.shakeT = 80; this.shakeMag = data.accent ? 4 : 2.5;
+        this.cones.push({ x: p.x, y: p.y, dir: data.dir, range: data.range, arc: data.arc, age: 0, life: 0.36, accent: data.accent, heavy: data.heavy });
+        this.shakeT = 120; this.shakeMag = data.accent ? 6 : 4;
         break;
       case 'kill': {
         const color = ENEMIES[data.type]?.color ?? '#ffffff';
@@ -219,7 +233,8 @@ class Renderer {
       const sides = e.type === 'chaser' ? 5 : e.type === 'swarm' ? 3 : e.type === 'tank' ? 6 : 8;
       const rr = e.r * (1 + pulse * 0.12);
       const rot = game.time * (e.type === 'swarm' ? 3 : 0.8) + e.id;
-      ctx.fillStyle = e.flash > 0 ? '#ffffff' : def.color;
+      const enemyColor = e.type === 'boss' && game.meta?.achievements?.includes('boss_triple') ? '#ff5dff' : def.color;
+      ctx.fillStyle = e.flash > 0 ? '#ffffff' : enemyColor;
       ctx.globalAlpha = 0.92;
       ctx.beginPath();
       for (let i = 0; i < sides; i++) {
@@ -234,7 +249,7 @@ class Renderer {
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(e.x - e.r, e.y - e.r - 10, e.r * 2, 5);
-        ctx.fillStyle = def.color;
+        ctx.fillStyle = enemyColor;
         ctx.fillRect(e.x - e.r, e.y - e.r - 10, e.r * 2 * Math.max(0, e.hp / e.maxHp), 5);
         ctx.globalCompositeOperation = 'lighter';
       }
@@ -254,11 +269,20 @@ class Renderer {
     for (const c of this.cones) {
       c.age += dt;
       const a = 1 - c.age / c.life;
-      ctx.fillStyle = c.accent ? `rgba(255, 210, 62, ${0.4 * a})` : `rgba(255, 140, 66, ${0.3 * a})`;
+      const waveR = c.range * (0.32 + 0.68 * (c.age / c.life));
+      ctx.fillStyle = c.accent ? `rgba(255, 210, 62, ${0.42 * a})` : `rgba(255, 90, 180, ${0.28 * a})`;
       ctx.beginPath();
       ctx.moveTo(c.x, c.y);
-      ctx.arc(c.x, c.y, c.range * (0.4 + 0.6 * (c.age / c.life)), c.dir - c.arc / 2, c.dir + c.arc / 2);
+      ctx.arc(c.x, c.y, waveR, c.dir - c.arc / 2, c.dir + c.arc / 2);
       ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = c.accent ? `rgba(255, 242, 180, ${0.75 * a})` : `rgba(240, 77, 216, ${0.7 * a})`;
+      ctx.lineWidth = c.heavy ? 7 * a + 2 : 4 * a + 1;
+      for (let i = -1; i <= 1; i++) {
+        const off = i * 0.08 * Math.sin(c.age * 32);
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, waveR * (0.86 + i * 0.07), c.dir - c.arc / 2 + off, c.dir + c.arc / 2 + off);
+        ctx.stroke();
+      }
     }
 
     // リング（ノヴァ等）
@@ -269,7 +293,22 @@ class Renderer {
       ctx.strokeStyle = r.color;
       ctx.globalAlpha = 1 - k;
       ctx.lineWidth = r.w * (1 - k) + 1;
-      ctx.beginPath(); ctx.arc(r.x, r.y, r.r + (r.max - r.r) * k, 0, Math.PI * 2); ctx.stroke();
+      if (r.style === 'spike') {
+        const rad = r.r + (r.max - r.r) * k;
+        ctx.beginPath();
+        for (let i = 0; i < 24; i++) {
+          const a = (Math.PI * 2 * i) / 24;
+          const rr = i % 2 === 0 ? rad : rad * 0.72;
+          const x = r.x + Math.cos(a) * rr;
+          const y = r.y + Math.sin(a) * rr;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      } else {
+        ctx.beginPath(); ctx.arc(r.x, r.y, r.r + (r.max - r.r) * k, 0, Math.PI * 2); ctx.stroke();
+      }
       ctx.globalAlpha = 1;
     }
 
@@ -304,10 +343,18 @@ class Renderer {
         ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 8 + pulse * 6, 0, Math.PI * 2); ctx.stroke();
       }
       const blink = p.iframe > 0 && Math.floor(game.time * 20) % 2 === 0;
-      ctx.fillStyle = blink ? 'rgba(255,255,255,0.5)' : '#eafcff';
+      const ach = new Set(game.meta?.achievements ?? []);
+      const playerOuter = ach.has('endless_5') ? '#d7fff0' : '#eafcff';
+      const playerInner = ach.has('boss_triple') ? '#ff5d73' : '#3be8f0';
+      ctx.fillStyle = blink ? 'rgba(255,255,255,0.5)' : playerOuter;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (1 + pulse * 0.1), 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#3be8f0';
+      ctx.fillStyle = playerInner;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r * 0.55, 0, Math.PI * 2); ctx.fill();
+      if (ach.has('night_rider')) {
+        ctx.strokeStyle = `hsl(${(game.time * 260) % 360} 90% 62%)`;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r + 14 + pulse * 5, 0, Math.PI * 2); ctx.stroke();
+      }
       // 向きインジケータ
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();

@@ -99,6 +99,14 @@ class Music {
     };
   }
 
+  resetSchedule() {
+    const beat = this.game.audioBeat ?? this.game.beat ?? 0;
+    this.nextStep = Math.floor(beat * 4);
+    this.anchorBeat = beat;
+    this.anchorTime = this.ctx?.currentTime ?? 0;
+    this.lastScheduleState = this.game.state;
+  }
+
   toggleMute() {
     this.muted = !this.muted;
     if (this.master) this.master.gain.value = this.muted ? 0 : 0.55;

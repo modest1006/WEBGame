@@ -38,6 +38,7 @@ function statLine(d) {
     : '';
   const chipLine = chips ? '<br><br><span class="chip-breakdown">'
     + `KILL ${chips.kills} / TIER ${chips.tier} / BOSS ${chips.boss} / SURVIVE ${chips.survival}`
+    + (chips.bonus ? ` / BONUS ${chips.bonus}` : '')
     + `</span><br><b class="chip-total" data-chip-count="${chips.total}">+0 CHIPS</b>`
     + achievementLine
     + '<br><button class="studio-link" data-open-studio="1">STUDIOで強化</button>' : '';
@@ -91,7 +92,7 @@ function studioHtml() {
       + '</div>';
   }).join('');
   return `<div class="chip-wallet">NEON CHIPS <b>${meta.chips}</b></div>`
-    + `<div class="studio-grid"><div class="dj-booth">${rack}<div class="booth-deck"></div></div><div class="gear-list">${list}</div></div>`
+    + `<div class="studio-grid"><div class="dj-booth ${isRackComplete(meta) ? 'complete' : ''}">${rack}<div class="booth-deck"></div></div><div class="gear-list">${list}</div></div>`
     + '<div class="title-actions"><button class="studio-link" data-back-title="1">TITLE</button><button class="studio-link" data-open-achievements="1">ACHIEVEMENTS</button></div>';
 }
 
@@ -254,7 +255,10 @@ function onBeatUI() {
 game.on((type, data) => {
   renderer.handleEvent(type, data, game);
   switch (type) {
-    case 'start': music.setBossMode(false); break;
+    case 'start':
+      music.resetSchedule();
+      music.setBossMode(false);
+      break;
     case 'beat': onBeatUI(); break;
     case 'dash': music.sfx(data.judge, data); break;
     case 'maxgroove': music.sfx('maxgroove', data); break;
@@ -296,7 +300,18 @@ const actions = {
       syncOverlay();
     }
   },
-  restart: () => { if (game.state !== 'title') { game.start(selectedMode); syncOverlay(); } },
+  restart: () => {
+    music.unlock();
+    selectedMode = game.mode === MODE_ENDLESS ? MODE_ENDLESS : MODE_NORMAL;
+    if (gearLevel(game.meta, 'record_bag') > 0) {
+      game.state = 'title';
+      overlayView = 'loadout';
+      syncOverlay();
+    } else {
+      game.start(selectedMode);
+      syncOverlay();
+    }
+  },
   mute: () => {
     const muted = music.toggleMute();
     $('mute-btn').textContent = muted ? '🔇' : '🔊';
