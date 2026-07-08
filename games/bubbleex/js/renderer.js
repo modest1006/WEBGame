@@ -81,7 +81,64 @@
 
     this.buildLauncher();
     this.buildWalls();
+    this.buildCeiling();
   }
+
+  // Suspended ceiling that descends with ceilingOffsetRows. A metal beam sits just above
+  // the top bubble row (grid row 0), the bubble mass "hangs" from it, and two hydraulic
+  // rods telescope down from the fixed frame top so it reads as being lowered — instead of
+  // the mass appearing to float in mid-air after a descent.
+  BubbleExRenderer.prototype.buildCeiling = function () {
+    var W = C.BOARD_W;
+    var grp = new THREE.Group();
+    var beamMat = new THREE.MeshStandardMaterial({ color: 0x2a2f3e, metalness: 0.82, roughness: 0.34 });
+    var beam = new THREE.Mesh(new THREE.BoxGeometry(W + 26, 16, 16), beamMat);
+    grp.add(beam);
+    // glowing underside strip (matches the neon side rails)
+    var trim = new THREE.Mesh(new THREE.BoxGeometry(W + 26, 3, 18),
+      new THREE.MeshBasicMaterial({ color: 0x59c7ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false }));
+    trim.position.y = -9;
+    grp.add(trim);
+    // downward teeth/hooks the bubbles hang off
+    var hookMat = new THREE.MeshStandardMaterial({ color: 0x3a4152, metalness: 0.7, roughness: 0.4 });
+    var nHooks = C.COLS;
+    for (var i = 0; i < nHooks; i++) {
+      var hook = new THREE.Mesh(new THREE.ConeGeometry(4, 11, 4), hookMat);
+      hook.rotation.x = Math.PI; // point down
+      hook.position.set(-W / 2 + (i + 0.5) * (W / nHooks), -13, 0);
+      grp.add(hook);
+    }
+    grp.position.set(C.BOARD_W / 2, 0, -2); // x-centered in board-local; y set per frame
+    this.ceilingBeamGroup = grp;
+    this.boardGroup.add(grp);
+
+    // Telescoping hydraulic rods from the fixed frame top down to the beam.
+    this.ceilingRods = [];
+    var rodMat = new THREE.MeshStandardMaterial({ color: 0x5a6274, metalness: 0.85, roughness: 0.3 });
+    var rodXs = [-W * 0.34, W * 0.34];
+    for (var k = 0; k < rodXs.length; k++) {
+      var rod = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 1, 8), rodMat); // unit height, scaled in Y
+      rod.userData.rx = rodXs[k];
+      rod.position.z = -4;
+      this.ceilingRods.push(rod);
+      this.boardGroup.add(rod);
+    }
+  };
+
+  // Position the descending ceiling for the current vertical offset (oy = physical px).
+  BubbleExRenderer.prototype.updateCeiling = function (oy) {
+    if (!this.ceilingBeamGroup) return;
+    var beamY = -oy + 7; // scene-local: just above grid row 0 (which renders at -(20+oy))
+    this.ceilingBeamGroup.position.y = beamY;
+    var topAnchor = (C.ROWS * C.ROW_H) / 2 + 60; // fixed, off the top of the frame
+    var botY = beamY + 8; // top face of the beam
+    for (var i = 0; i < this.ceilingRods.length; i++) {
+      var rod = this.ceilingRods[i];
+      var len = Math.max(1, topAnchor - botY);
+      rod.position.set(C.BOARD_W / 2 + rod.userData.rx, (topAnchor + botY) / 2, -4);
+      rod.scale.y = len;
+    }
+  };
 
   // Neon side rails drawn exactly at the ball-CENTER reflection line (board x = r and
   // BOARD_W - r). The shot bounces when its center reaches these lines, so putting a
@@ -668,6 +725,7 @@
     this.updatePopSeqs(dt);
     this.updateFallGhosts(dt);
     this.syncBoard(state, true);
+    this.updateCeiling((state.ceilingOffsetRows || 0) * C.ROW_H);
     this.syncShot(state.shot);
     if (launchPos) {
       this.updateLauncher(launchPos, state.aimDeg);
