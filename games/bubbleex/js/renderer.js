@@ -80,7 +80,36 @@
     this.particleGroup.position.copy(this.boardGroup.position);
 
     this.buildLauncher();
+    this.buildWalls();
   }
+
+  // Neon side rails drawn exactly at the ball-CENTER reflection line (board x = r and
+  // BOARD_W - r). The shot bounces when its center reaches these lines, so putting a
+  // visible wall there makes the aim guide read as reflecting off a real edge instead
+  // of "slightly before the frame". Purely cosmetic (additive glow), in board space.
+  BubbleExRenderer.prototype.buildWalls = function () {
+    var r = C.BUBBLE_RADIUS;
+    var h = C.ROWS * C.ROW_H + 80;
+    var yc = -(C.ROWS * C.ROW_H) / 2 + C.CELL / 2; // vertical center of the board span (scene-local)
+    var mkRail = function (localX) {
+      var g = new THREE.Group();
+      var core = new THREE.Mesh(
+        new THREE.BoxGeometry(3, h, 3),
+        new THREE.MeshBasicMaterial({ color: 0xbfefff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
+      );
+      var glow = new THREE.Mesh(
+        new THREE.BoxGeometry(11, h, 3),
+        new THREE.MeshBasicMaterial({ color: 0x2f8fff, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false })
+      );
+      g.add(glow); g.add(core);
+      g.position.set(localX, yc, 1);
+      return g;
+    };
+    this.wallL = mkRail(r);
+    this.wallR = mkRail(C.BOARD_W - r);
+    this.boardGroup.add(this.wallL);
+    this.boardGroup.add(this.wallR);
+  };
 
   BubbleExRenderer.prototype.buildLauncher = function () {
     var group = new THREE.Group();
@@ -347,11 +376,15 @@
   BubbleExRenderer.prototype.syncBoard = function (state, wobble) {
     var seen = {};
     var t = this.clock;
+    // The board slides down by ceilingOffsetRows; bubbles keep their grid cells but
+    // render (and collide, per game.js) at cellY + this offset. Pop/drop particles are
+    // emitted with the offset already baked into their y, so they stay aligned.
+    var oy = (state.ceilingOffsetRows || 0) * C.ROW_H;
     state.cells.forEach((cell) => {
       var kk = cell.row * 64 + cell.col;
       seen[kk] = true;
       var wx = GH.cellX(cell.row, cell.col);
-      var wy = GH.cellY(cell.row);
+      var wy = GH.cellY(cell.row) + oy;
       var pos = this.toScene(wx, wy);
       var mesh = this.bubbleMeshes[kk];
       if (!mesh) {

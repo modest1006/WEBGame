@@ -99,6 +99,7 @@
   BubbleExGame.prototype.buildStage = function (n) {
     var conf = this.stageConf(n);
     this.grid = {};
+    this.ceilingOffsetRows = 0; // fresh stage: ceiling back at the top
     this.shotsToNextDrop = conf.shotsPerDrop;
     this.shotsSinceDrop = 0;
     var palette = C.COLORS.slice(0, conf.colors);
@@ -206,11 +207,13 @@
         this.emit('wallbounce', { x: s.x, y: s.y });
         continue;
       }
-      // Ceiling hit
-      if (ny < C.BUBBLE_RADIUS) {
-        var tCeil = (C.BUBBLE_RADIUS - s.y) / s.vy;
+      // Ceiling hit. The ceiling line descends with ceilingOffsetRows (the whole
+      // board is offset downward by that many rows), so the top wall moves down too.
+      var ceilY = this.ceilingOffsetRows * C.ROW_H + C.BUBBLE_RADIUS;
+      if (ny < ceilY) {
+        var tCeil = (ceilY - s.y) / s.vy;
         s.x = s.x + s.vx * tCeil;
-        s.y = C.BUBBLE_RADIUS;
+        s.y = ceilY;
         this.settleShot();
         return;
       }
@@ -238,7 +241,7 @@
       for (var k = 0; k < keys.length; k++) {
         var kk = keys[k];
         var row = Math.floor(kk / 64), col = kk % 64;
-        var cx = cellX(row, col), cy = cellY(row);
+        var cx = cellX(row, col), cy = cellY(row) + this.ceilingOffsetRows * C.ROW_H;
         var dx = cx - x, dy = cy - y;
         if (dx * dx + dy * dy <= minDist2) {
           return { x: x, y: y };
@@ -252,7 +255,7 @@
     var s = this.shot;
     var cell = this.snapCell(s.x, s.y);
     this.grid[key(cell[0], cell[1])] = s.color;
-    this.emit('snap', { row: cell[0], col: cell[1], color: s.color, x: cellX(cell[0], cell[1]), y: cellY(cell[0]) });
+    this.emit('snap', { row: cell[0], col: cell[1], color: s.color, x: cellX(cell[0], cell[1]), y: cellY(cell[0]) + this.ceilingOffsetRows * C.ROW_H });
     this.shot = null;
     this.status = 'resolving';
     this.resolvePops(cell[0], cell[1]);
@@ -260,7 +263,9 @@
 
   // Find nearest EMPTY cell to (x,y), preferring the actual nearest grid slot.
   BubbleExGame.prototype.snapCell = function (x, y) {
-    var approxRow = Math.max(0, Math.round((y - C.CELL / 2) / C.ROW_H));
+    // Work in grid space: strip the ceiling offset off the physical y first.
+    var gy = y - this.ceilingOffsetRows * C.ROW_H;
+    var approxRow = Math.max(0, Math.round((gy - C.CELL / 2) / C.ROW_H));
     var best = null, bestD = Infinity;
     for (var dr = -2; dr <= 2; dr++) {
       var row = approxRow + dr;
@@ -270,12 +275,12 @@
         var kk = key(row, col);
         if (this.grid[kk]) continue;
         var cx = cellX(row, col), cy = cellY(row);
-        var dx = cx - x, dy = cy - y;
+        var dx = cx - x, dy = cy - gy;
         var d = dx * dx + dy * dy;
         if (d < bestD) { bestD = d; best = [row, col]; }
       }
     }
-    if (!best) best = nearestCell(x, y);
+    if (!best) best = nearestCell(x, gy);
     return best;
   };
 
@@ -332,20 +337,21 @@
   }
 
   BubbleExGame.prototype.resolvePops = function (row, col) {
+    var oy = this.ceilingOffsetRows * C.ROW_H;
     var cluster = this.floodSameColor(row, col);
     var popped = [];
     var dropped = [];
     var popColor = this.grid[key(row, col)];
     if (cluster.length >= 3) {
       // BFS order preserved: index = chain distance from the landing cell.
-      popped = cluster.map((c) => ({ row: c[0], col: c[1], x: cellX(c[0], c[1]), y: cellY(c[0]), color: popColor }));
+      popped = cluster.map((c) => ({ row: c[0], col: c[1], x: cellX(c[0], c[1]), y: cellY(c[0]) + oy, color: popColor }));
       cluster.forEach((c) => { delete this.grid[key(c[0], c[1])]; });
       var connected = this.ceilingConnected();
       var allKeys = Object.keys(this.grid);
       allKeys.forEach((kk) => {
         if (!connected[kk]) {
           var row2 = Math.floor(kk / 64), col2 = kk % 64;
-          dropped.push({ row: row2, col: col2, x: cellX(row2, col2), y: cellY(row2), color: this.grid[kk] });
+          dropped.push({ row: row2, col: col2, x: cellX(row2, col2), y: cellY(row2) + oy, color: this.grid[kk] });
           delete this.grid[kk];
         }
       });
@@ -398,19 +404,18 @@
     this.status = 'aiming';
   };
 
+  // Descend the ceiling by one row. IMPORTANT: we do NOT remap grid rows here.
+  // In a hex offset grid there is no cell directly below another (each cell has a
+  // down-left and down-right neighbor), so shifting every bubble by (row+1, same col)
+  // is a SHEAR, not a rigid translation — it distorts positions and silently changes
+  // which bubbles are adjacent (previously the cause of "3 connected won't pop" and
+  // "clearing one color drops everything"). Instead we keep bubbles fixed in the grid
+  // and treat ceilingOffsetRows as a pure vertical offset applied at physics/render/
+  // deadline time. Geometry and connectivity stay exactly intact; only the whole board
+  // slides down. Game-over is decided by effective row (gridRow + offset) in isGameOver.
   BubbleExGame.prototype.descendCeiling = function () {
-    var newGrid = {};
-    var overflow = false;
-    Object.keys(this.grid).forEach((kk) => {
-      var row = Math.floor(kk / 64), col = kk % 64;
-      var nr = row + 1;
-      if (nr >= C.DEADLINE_ROW) overflow = true;
-      if (nr < C.ROWS) newGrid[key(nr, col)] = this.grid[kk];
-    });
-    this.grid = newGrid;
     this.ceilingOffsetRows++;
     this.emit('ceiling', { offset: this.ceilingOffsetRows });
-    if (overflow) this.forceGameOver = true;
   };
 
   BubbleExGame.prototype.isBoardClear = function () {
@@ -422,7 +427,7 @@
     var keys = Object.keys(this.grid);
     for (var i = 0; i < keys.length; i++) {
       var row = Math.floor(keys[i] / 64);
-      if (row >= C.DEADLINE_ROW) return true;
+      if (row + this.ceilingOffsetRows >= C.DEADLINE_ROW) return true;
     }
     return false;
   };
@@ -507,6 +512,7 @@
       stage: this.stage,
       score: this.score,
       best: this.best,
+      ceilingOffsetRows: this.ceilingOffsetRows,
       current: this.current,
       next: this.next,
       aimDeg: this.aimDeg,
@@ -593,7 +599,7 @@
   // Used by debug shootAt(); tries direct shot then single-wall-bounce mirrored shot.
   BubbleExGame.prototype.angleForTarget = function (row, col) {
     var pos = this.launcherPos();
-    var tx = cellX(row, col), ty = cellY(row);
+    var tx = cellX(row, col), ty = cellY(row) + this.ceilingOffsetRows * C.ROW_H;
     var dx = tx - pos.x, dy = ty - pos.y;
     var directDeg = Math.atan2(dx, -dy) * 180 / Math.PI;
     if (Math.abs(directDeg) <= C.MAX_AIM_DEG) return directDeg;
