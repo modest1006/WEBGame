@@ -95,6 +95,18 @@ class Renderer {
         this.texts.push({ x: p.x, y: p.y - 80, text: '⚠ BOSS ⚠', color: '#ffd23e', age: 0, size: 26 });
         this.shakeT = 400; this.shakeMag = 6;
         break;
+      case 'waveWarn':
+        this.waveWarn = { angle: data.angle, type: data.type, age: 0, life: data.warnSec ?? 1.5 };
+        this.texts.push({ x: p.x, y: p.y - 90, text: '⚠ WAVE INCOMING ⚠', color: '#ff5d7a', age: 0, size: 22 });
+        break;
+      case 'waveStart':
+        this.waveWarn = null;
+        this.shakeT = 160; this.shakeMag = 3;
+        break;
+      case 'waveCleared':
+        this.texts.push({ x: p.x, y: p.y - 60, text: `WAVE CLEAR +${data.chips}`, color: '#7cff9e', age: 0, size: 20 });
+        this.rings.push({ x: p.x, y: p.y, r: 30, max: 200, life: 0.5, age: 0, color: '#7cff9e', w: 5 });
+        break;
       case 'groove-tier':
         this.rings.push({ x: p.x, y: p.y, r: 24, max: 170, life: 0.42, age: 0, color: data.color, w: 7 });
         this.texts.push({ x: p.x, y: p.y - 52, text: `TIER ${data.tier}`, color: data.color, age: 0, size: 20 });
@@ -230,7 +242,7 @@ class Renderer {
     for (const e of game.enemies) {
       if (Math.abs(e.x - this.camX) > viewR || Math.abs(e.y - this.camY) > viewR) continue;
       const def = ENEMIES[e.type];
-      const sides = e.type === 'chaser' ? 5 : e.type === 'swarm' ? 3 : e.type === 'tank' ? 6 : 8;
+      const sides = e.type === 'chaser' ? 5 : e.type === 'swarm' ? 3 : e.type === 'tank' ? 6 : e.type === 'armored' ? 4 : 8;
       const rr = e.r * (1 + pulse * 0.12);
       const rot = game.time * (e.type === 'swarm' ? 3 : 0.8) + e.id;
       const enemyColor = e.type === 'boss' && game.meta?.achievements?.includes('boss_triple') ? '#ff5dff' : def.color;
@@ -244,8 +256,28 @@ class Renderer {
       }
       ctx.closePath(); ctx.fill();
       ctx.globalAlpha = 1;
-      // タンク/ボスのHPバー
-      if (e.type === 'tank' || e.type === 'boss') {
+      // 装甲兵: HP50%超はシールド発光、以下は装甲剥がれ（ヒビ表現）
+      if (e.type === 'armored') {
+        if (e.hp / e.maxHp > 0.5) {
+          ctx.strokeStyle = '#cfe8ff';
+          ctx.lineWidth = 3;
+          ctx.globalAlpha = 0.55 + pulse * 0.3;
+          ctx.beginPath();
+          ctx.arc(e.x, e.y, rr + 6, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        } else {
+          ctx.strokeStyle = '#3a4a58';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(e.x - rr * 0.5, e.y - rr * 0.4);
+          ctx.lineTo(e.x + rr * 0.2, e.y + rr * 0.1);
+          ctx.lineTo(e.x - rr * 0.1, e.y + rr * 0.5);
+          ctx.stroke();
+        }
+      }
+      // タンク/ボス/装甲兵のHPバー
+      if (e.type === 'tank' || e.type === 'boss' || e.type === 'armored') {
         ctx.globalCompositeOperation = 'source-over';
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(e.x - e.r, e.y - e.r - 10, e.r * 2, 5);
@@ -409,6 +441,63 @@ class Renderer {
       v.addColorStop(1, `rgba(255,0,60,${this.hurtFlash * (reducedFlash ? 0.28 : 0.9)})`);
       ctx.fillStyle = v;
       ctx.fillRect(0, 0, W, H);
+    }
+
+    // ウェーブ予兆: 来襲方向の画面端が赤く脈動
+    if (this.waveWarn) {
+      this.waveWarn.age += dt;
+      if (this.waveWarn.age >= this.waveWarn.life) this.waveWarn = null;
+      else {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const k = 0.35 + 0.35 * Math.sin(this.waveWarn.age * 18);
+        const a = this.waveWarn.angle;
+        const cx = W / 2 + Math.cos(a) * (W / 2 - 46);
+        const cy = H / 2 + Math.sin(a) * (H / 2 - 46);
+        const edgeX = Math.max(30, Math.min(W - 30, cx));
+        const edgeY = Math.max(30, Math.min(H - 30, cy));
+        const g = ctx.createRadialGradient(edgeX, edgeY, 0, edgeX, edgeY, 190);
+        g.addColorStop(0, `rgba(255,60,110,${(reducedFlash ? 0.3 : 0.55) * k})`);
+        g.addColorStop(1, 'rgba(255,60,110,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+        // 方向矢印
+        ctx.save();
+        ctx.translate(edgeX, edgeY);
+        ctx.rotate(a);
+        ctx.fillStyle = `rgba(255,90,130,${0.6 + 0.4 * k})`;
+        ctx.beginPath();
+        ctx.moveTo(16, 0); ctx.lineTo(-8, -11); ctx.lineTo(-8, 11);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // ボス方向インジケータ: ボスが画面外にいる間、画面端にボス色の脈動矢印
+    const boss = game.bossRef;
+    if (boss && game.state !== 'title') {
+      const dx = boss.x - this.camX, dy = boss.y - this.camY;
+      const zz = this.zoom * this.dpr; // ワールド→デバイスpxの変換係数（transformと揃える）
+      const halfW = (W / zz) / 2, halfH = (H / zz) / 2;
+      const offscreen = Math.abs(dx) > halfW - 40 || Math.abs(dy) > halfH - 40;
+      if (offscreen) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const a = Math.atan2(dy, dx);
+        const dist = Math.hypot(dx, dy);
+        const size = Math.max(10, 26 - dist / 90);
+        const pulseK = 0.7 + 0.3 * Math.sin(game.time * 6);
+        const ex = Math.max(34, Math.min(W - 34, W / 2 + Math.cos(a) * (W / 2 - 34)));
+        const ey = Math.max(34, Math.min(H - 34, H / 2 + Math.sin(a) * (H / 2 - 34)));
+        ctx.save();
+        ctx.translate(ex, ey);
+        ctx.rotate(a);
+        ctx.fillStyle = '#ffd23e';
+        ctx.globalAlpha = 0.85 * pulseK;
+        ctx.beginPath();
+        ctx.moveTo(size, 0); ctx.lineTo(-size * 0.55, -size * 0.62); ctx.lineTo(-size * 0.55, size * 0.62);
+        ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
     }
   }
 }

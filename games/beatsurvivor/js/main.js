@@ -11,6 +11,7 @@ const $ = (id) => document.getElementById(id);
 const overlay = $('overlay');
 const levelupPanel = $('levelup');
 let endedAt = 0;
+let exitArmedAt = 0; // EXIT 2段確認用
 let selectedMode = MODE_NORMAL;
 let overlayView = 'title';
 let pendingLoadout = { weapon: 'beatshot', passive: 'amp' };
@@ -38,6 +39,7 @@ function statLine(d) {
     : '';
   const chipLine = chips ? '<br><br><span class="chip-breakdown">'
     + `KILL ${chips.kills} / TIER ${chips.tier} / BOSS ${chips.boss} / SURVIVE ${chips.survival}`
+    + (chips.wave ? ` / WAVE ${chips.wave}` : '')
     + (chips.bonus ? ` / BONUS ${chips.bonus}` : '')
     + `</span><br><b class="chip-total" data-chip-count="${chips.total}">+0 CHIPS</b>`
     + achievementLine
@@ -55,9 +57,17 @@ function statLine(d) {
 }
 
 function modeSelectHtml() {
-  return '<div class="mode-select">'
-    + `<button class="mode-btn" data-mode="${MODE_NORMAL}">NORMAL<span>3:00 BOSS / 5:00 CLEAR</span></button>`
-    + `<button class="mode-btn" data-mode="${MODE_ENDLESS}">ENDLESS<span>SURVIVE UNTIL DEATH</span></button>`
+  // モード選択はカセットテープ意匠（「押したら開始」に見えないように。開始はPLAYのみ）
+  const cassette = (mode, title, sub, tone) => `
+    <button class="cassette ${tone}" data-mode="${mode}" aria-label="${title}">
+      <span class="c-screw a"></span><span class="c-screw b"></span>
+      <span class="c-label">${title}</span>
+      <span class="c-window"><i class="reel"></i><span class="tape"></span><i class="reel"></i></span>
+      <span class="c-sub">${sub}</span>
+    </button>`;
+  return '<p class="deck-hint">─ SELECT TAPE ─</p><div class="mode-select cassette-deck">'
+    + cassette(MODE_NORMAL, 'STANDARD MIX', '3:00 BOSS / 5:00 CLEAR', 'cyan')
+    + cassette(MODE_ENDLESS, 'ENDLESS MIX', 'SURVIVE UNTIL DEATH', 'magenta')
     + '</div>';
 }
 
@@ -202,10 +212,10 @@ function syncOverlay() {
       showOverlay('PAUSE', settingsHtml() + 'P / Esc to resume');
       break;
     case 'dead':
-      showOverlay('GAME OVER', statLine(game.lastEnd ?? {}) + '<br><br>Press any key / tap to retry');
+      showOverlay('GAME OVER', statLine(game.lastEnd ?? {}) + '<br><br>タップでタイトルへ');
       break;
     case 'clear':
-      showOverlay('STAGE CLEAR!', statLine(game.lastEnd ?? {}) + '<br><br>Press any key / tap to play again');
+      showOverlay('STAGE CLEAR!', statLine(game.lastEnd ?? {}) + '<br><br>タップでタイトルへ');
       break;
     default:
       overlay.classList.add('hidden');
@@ -301,15 +311,31 @@ const actions = {
     }
   },
   restart: () => {
+    // EXIT(タイトルへ戻る)の2段確認。押し間違いでランが消えるのを防ぐ
     music.unlock();
-    selectedMode = game.mode === MODE_ENDLESS ? MODE_ENDLESS : MODE_NORMAL;
-    if (gearLevel(game.meta, 'record_bag') > 0) {
+    const btn = $('exit-btn');
+    const inRun = game.state === 'playing' || game.state === 'levelup' || game.state === 'paused';
+    if (!inRun) return;
+    if (performance.now() - exitArmedAt < 3000 && exitArmedAt > 0) {
+      exitArmedAt = 0;
+      if (btn) { btn.textContent = '⏏'; btn.classList.remove('armed'); }
+      selectedMode = game.mode === MODE_ENDLESS ? MODE_ENDLESS : MODE_NORMAL;
       game.state = 'title';
-      overlayView = 'loadout';
+      overlayView = 'title';
       syncOverlay();
     } else {
-      game.start(selectedMode);
-      syncOverlay();
+      exitArmedAt = performance.now();
+      if (btn) {
+        btn.textContent = 'EXIT?';
+        btn.classList.add('armed');
+        setTimeout(() => {
+          if (exitArmedAt > 0 && performance.now() - exitArmedAt >= 2950) {
+            exitArmedAt = 0;
+            btn.textContent = '⏏';
+            btn.classList.remove('armed');
+          }
+        }, 3050);
+      }
     }
   },
   mute: () => {
@@ -319,17 +345,11 @@ const actions = {
   debug: () => debugOverlay.toggle(),
   anyInput: () => {
     music.unlock();
-    if (game.state === 'title') {
-      if (overlayView === 'title') {
-        if (gearLevel(game.meta, 'record_bag') > 0) overlayView = 'loadout';
-        else game.start(selectedMode);
-        syncOverlay();
-      }
-    }
-    else if ((game.state === 'dead' || game.state === 'clear') && performance.now() - endedAt > 800) {
+    // タイトルはPLAYボタンからのみ開始（カセット選択タップの誤爆防止）
+    if ((game.state === 'dead' || game.state === 'clear') && performance.now() - endedAt > 800) {
+      // リザルト後はタイトルへ戻す（連戦はタイトルのPLAYから）
+      game.state = 'title';
       overlayView = 'title';
-      if (gearLevel(game.meta, 'record_bag') > 0) overlayView = 'loadout';
-      else game.start(selectedMode);
       syncOverlay();
     }
   },

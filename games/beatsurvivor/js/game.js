@@ -71,6 +71,11 @@ class Game {
     this.nextBossTime = BOSS_TIME;
     this.endlessTitleShown = false;
     this.nextId = 1;
+    this.nextWaveTime = WAVE_INTERVAL;
+    this.waveWarned = false;
+    this.pendingWave = null;
+    this.waveSet = new Set();
+    this.waveChips = 0;
     this.applyMetaLoadout();
   }
 
@@ -407,8 +412,11 @@ class Game {
     this.spawnAcc += spawnRate(this.time) * dt;
     while (this.spawnAcc >= 1) {
       this.spawnAcc -= 1;
-      this.spawnAround('chaser');
+      // 2:00以降は低頻度で装甲兵が混ざる（硬さで敵を意識させる）
+      const type = (this.time >= ARMORED_START_TIME && this.rng.next() < ARMORED_CHANCE) ? 'armored' : 'chaser';
+      this.spawnAround(type);
     }
+    this.waveLogic();
     if (!this.isEndless() && !this.bossSpawned && this.time >= BOSS_TIME) {
       this.bossSpawned = true;
       this.bossRef = this.spawnAround('boss', 750);
@@ -420,6 +428,67 @@ class Game {
         this.nextBossTime += ENDLESS_BOSS_INTERVAL;
       }
     }
+  }
+
+  // ===== ウェーブイベント: 30秒毎に隊列で攻める =====
+  waveLogic() {
+    if (this.time >= this.nextWaveTime - WAVE_WARN_SEC && !this.waveWarned) {
+      this.waveWarned = true;
+      this.pendingWave = {
+        type: WAVE_TYPES[Math.floor(this.rng.next() * WAVE_TYPES.length)],
+        angle: this.rng.range(0, Math.PI * 2),
+      };
+      this.emit('waveWarn', { ...this.pendingWave, warnSec: WAVE_WARN_SEC });
+    }
+    if (this.time >= this.nextWaveTime) {
+      if (this.pendingWave) this.executeWave(this.pendingWave);
+      this.pendingWave = null;
+      this.waveWarned = false;
+      this.nextWaveTime += WAVE_INTERVAL;
+    }
+  }
+
+  executeWave(w) {
+    const p = this.p;
+    const add = (type, x, y) => {
+      const d = Math.hypot(x, y);
+      if (d > ARENA_R - 30) { x *= (ARENA_R - 30) / d; y *= (ARENA_R - 30) / d; }
+      const e = this.spawnEnemy(type, x, y, {});
+      if (e) this.waveSet.add(e);
+    };
+    if (w.type === 'surround') {
+      const n = 22;
+      for (let i = 0; i < n; i++) {
+        const a = w.angle + (Math.PI * 2 * i) / n;
+        add('chaser', p.x + Math.cos(a) * 720, p.y + Math.sin(a) * 720);
+      }
+    } else if (w.type === 'rush') {
+      for (let i = 0; i < 14; i++) {
+        const dist = 700 + i * 46;
+        const off = this.rng.range(-40, 40);
+        add(i % 4 === 3 ? 'chaser' : 'swarm',
+          p.x + Math.cos(w.angle) * dist + Math.cos(w.angle + Math.PI / 2) * off,
+          p.y + Math.sin(w.angle) * dist + Math.sin(w.angle + Math.PI / 2) * off);
+      }
+    } else if (w.type === 'wedge') {
+      for (let row = 0; row < 5; row++) {
+        for (let k = -row; k <= row; k++) {
+          add('chaser',
+            p.x + Math.cos(w.angle) * (700 + row * 60) + Math.cos(w.angle + Math.PI / 2) * k * 55,
+            p.y + Math.sin(w.angle) * (700 + row * 60) + Math.sin(w.angle + Math.PI / 2) * k * 55);
+        }
+      }
+    } else { // swarmburst
+      for (let q = 0; q < 4; q++) {
+        const a = w.angle + (Math.PI / 2) * q;
+        for (let i = 0; i < 8; i++) {
+          add('swarm',
+            p.x + Math.cos(a) * 750 + this.rng.range(-70, 70),
+            p.y + Math.sin(a) * 750 + this.rng.range(-70, 70));
+        }
+      }
+    }
+    this.emit('waveStart', { type: w.type, angle: w.angle, count: this.waveSet.size });
   }
 
   boostExistingEnemies(type) {
@@ -563,6 +632,13 @@ class Game {
     this.kills++;
     this.gems.push({ x: e.x, y: e.y, xp: e.xp, vx: 0, vy: 0 });
     this.emit('kill', { x: e.x, y: e.y, type: e.type, groove: this.groove });
+    if (this.waveSet.has(e)) {
+      this.waveSet.delete(e);
+      if (this.waveSet.size === 0) {
+        this.waveChips += WAVE_CLEAR_CHIPS;
+        this.emit('waveCleared', { chips: WAVE_CLEAR_CHIPS });
+      }
+    }
     if (e.type === 'boss') {
       this.stats.bossRankSum += this.isEndless() ? Math.max(1, this.bossSpawns) : 1;
       this.bossRef = null;
@@ -897,6 +973,10 @@ class Game {
     const previousMeta = normalizeMeta(loadBeatSurvivorSave().meta);
     const unlocked = candidates.filter((id) => !previousMeta.achievements.includes(id));
     const chipBreakdown = { ...baseChipBreakdown };
+    if (this.waveChips > 0) {
+      chipBreakdown.wave = this.waveChips;
+      chipBreakdown.total += this.waveChips;
+    }
     if (previousMeta.achievements.includes('stage_clear')) {
       chipBreakdown.bonus = Math.floor(baseChipBreakdown.total * 0.1);
       chipBreakdown.total += chipBreakdown.bonus;

@@ -48,8 +48,16 @@ const ENEMIES = {
   chaser: { r: 13, speed: 72, hp: 22, hpGrow: 9, dmg: 8, xp: 1, color: '#f0508c' },
   swarm:  { r: 8,  speed: 135, hp: 8, hpGrow: 3, dmg: 5, xp: 1, color: '#c04df9' },
   tank:   { r: 24, speed: 40, hp: 130, hpGrow: 40, dmg: 18, xp: 6, color: '#ff8c42' },
+  armored:{ r: 21, speed: 30, hp: 260, hpGrow: 80, dmg: 14, xp: 12, color: '#9fb8cc' }, // 装甲兵。硬さで意識させる枠
   boss:   { r: 46, speed: 58, hp: 3200, hpGrow: 0, dmg: 30, xp: 60, color: '#ffd23e' },
 };
+// ===== ウェーブイベント（30秒毎に隊列で攻める） =====
+const WAVE_INTERVAL = 30;
+const WAVE_WARN_SEC = 1.5;
+const WAVE_TYPES = ['surround', 'rush', 'wedge', 'swarmburst'];
+const WAVE_CLEAR_CHIPS = 25;
+const ARMORED_START_TIME = 120;   // 2:00以降に混ざる
+const ARMORED_CHANCE = 0.06;
 const ENEMY_CAP = 220;
 const ENEMY_GRID_CELL = 96;
 const TIER_HITSTOP_SEC = 0.09;
