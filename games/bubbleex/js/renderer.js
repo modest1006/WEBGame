@@ -20,6 +20,20 @@
     orange: 0x421900
   };
 
+  var RAINBOW = [0xff4040, 0xffb020, 0xfff040, 0x40ff70, 0x40c0ff, 0xb060ff];
+
+  function makeStarGeo(outerR, innerR) {
+    var shape = new THREE.Shape();
+    for (var i = 0; i < 10; i++) {
+      var r = (i % 2 === 0) ? outerR : innerR;
+      var a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+      var x = Math.cos(a) * r, y = Math.sin(a) * r;
+      if (i === 0) shape.moveTo(x, y); else shape.lineTo(x, y);
+    }
+    shape.closePath();
+    return new THREE.ShapeGeometry(shape);
+  }
+
   function BubbleExRenderer(canvas) {
     this.canvas = canvas;
     this.scene = new THREE.Scene();
@@ -29,7 +43,13 @@
     this.clock = 0;
     this.bubbleMeshes = {}; // key -> mesh
     this.shotMesh = null;
-    this.particles = []; // {mesh, vx,vy,vz, life, maxLife, kind}
+    this.particles = []; // {mesh, vx,vy,vz, spin, life, maxLife, growTo?}
+    this.popSeqs = [];   // popcorn-chain pop sequences
+    this.fallGhosts = []; // physics-falling dropped bubbles
+    this.shakeT = 0;
+    this.shakeDur = 0.001;
+    this.shakeAmp = 0;
+    this.camBaseZ = 855;
     this.stageBgGroup = new THREE.Group();
     this.scene.add(this.stageBgGroup);
     this.boardGroup = new THREE.Group();
@@ -39,8 +59,9 @@
     this.stageId = 0;
 
     this.geo = new THREE.SphereGeometry(C.BUBBLE_RADIUS, 20, 16);
-    this.starGeo = new THREE.ConeGeometry(3, 7, 4);
-    this.shardGeo = new THREE.TetrahedronGeometry(4, 0);
+    this.shardGeo = new THREE.TetrahedronGeometry(5, 0);
+    this.sparkGeo = makeStarGeo(7, 2.8);
+    this.ringGeo = new THREE.RingGeometry(5, 8.5, 24);
     this.matCache = {};
 
     this.buildLights();
@@ -70,10 +91,31 @@
     this.launcherGroup = group;
     this.boardGroup.add(group);
 
-    // Aim guide: dashed line segments, updated each frame.
-    var lineMat = new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 6, gapSize: 5, transparent: true, opacity: 0.55 });
+    // Loaded bubble sitting in the cannon mouth + small NEXT bubble waiting beside it.
+    this.loadedMesh = new THREE.Mesh(this.geo, this.matFor('red'));
+    this.loadedMesh.visible = false;
+    this.boardGroup.add(this.loadedMesh);
+    this.nextWaitMesh = new THREE.Mesh(this.geo, this.matFor('blue'));
+    this.nextWaitMesh.visible = false;
+    this.boardGroup.add(this.nextWaitMesh);
+    this.lastCurrent = null;
+    this.reloadT = 10; // large = reload animation finished
+
+    // Aim guide: dashed line, always drawn on top (depthTest off + max renderOrder)
+    // so it never sinks into the floor plane, with additive glow.
+    var lineMat = new THREE.LineDashedMaterial({
+      color: 0xaffdff,
+      dashSize: 7,
+      gapSize: 5,
+      transparent: true,
+      opacity: 0.95,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
     var lineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
     this.aimLine = new THREE.Line(lineGeo, lineMat);
+    this.aimLine.renderOrder = 999;
     this.aimLine.computeLineDistances();
     this.boardGroup.add(this.aimLine);
   };
@@ -94,7 +136,7 @@
     var remaining = maxLen;
     var bounced = false;
     for (var iter = 0; iter < 2 && remaining > 0; iter++) {
-      var tWallX = Infinity, side = null;
+      var tWallX = Infinity;
       if (dx > 0) tWallX = (C.BOARD_W - r - x) / dx;
       else if (dx < 0) tWallX = (r - x) / dx;
       var tCeil = dy < 0 ? (r - y) / dy : Infinity;
@@ -119,6 +161,73 @@
     this.launcherBarrel.rotation.z = Math.PI / 2 - (deg * Math.PI / 180);
   };
 
+  // Loaded bubble in the cannon mouth + waiting NEXT bubble, with a
+  // spin-in reload animation whenever the loaded color changes.
+  BubbleExRenderer.prototype.updateCannonBubbles = function (state, launchPos, dt) {
+    if (!this.loadedMesh) return;
+    var p = this.toScene(launchPos.x, launchPos.y);
+    var mouth = { x: p.x, y: p.y + 30, z: 10 };
+    var wait = { x: p.x + 48, y: p.y - 2, z: 10 };
+    var inPlay = state.status === 'aiming' || state.status === 'flying' || state.status === 'resolving' || state.status === 'title';
+    if (!inPlay) {
+      this.loadedMesh.visible = false;
+      this.nextWaitMesh.visible = false;
+      return;
+    }
+    // NEXT waiting bubble (small)
+    this.nextWaitMesh.visible = true;
+    if (this.nextWaitMesh.userData.color !== state.next) {
+      this.nextWaitMesh.material = this.matFor(state.next);
+      this.nextWaitMesh.userData.color = state.next;
+    }
+
+    if (state.shot) {
+      // Ball is in flight: mouth is empty, next waits.
+      this.loadedMesh.visible = false;
+      this.nextWaitMesh.position.set(wait.x, wait.y, wait.z);
+      this.nextWaitMesh.scale.setScalar(0.55);
+      this.hadShot = true;
+      return;
+    }
+    // Reload animation after every settled shot (even same color), and on first show.
+    // hadShot covers the render-observed flight; triggerReload() (from the game's
+    // 'snap' event) covers headless/frame-skipped settles deterministically.
+    if (this.hadShot || this.lastCurrent === null) {
+      this.hadShot = false;
+      this.reloadT = 0;
+    }
+    this.lastCurrent = state.current;
+    if (this.loadedMesh.userData.color !== state.current) {
+      this.loadedMesh.material = this.matFor(state.current);
+      this.loadedMesh.userData.color = state.current;
+    }
+    this.loadedMesh.visible = true;
+    var DUR = 0.28;
+    if (this.reloadT < DUR) {
+      this.reloadT += dt;
+      var k = Math.min(1, this.reloadT / DUR);
+      var e = 1 - Math.pow(1 - k, 3); // ease-out cubic
+      // Loaded bubble swings from the waiting slot into the mouth with a full spin.
+      this.loadedMesh.position.set(
+        wait.x + (mouth.x - wait.x) * e,
+        wait.y + (mouth.y - wait.y) * e + Math.sin(e * Math.PI) * 14,
+        mouth.z
+      );
+      this.loadedMesh.scale.setScalar(0.55 + 0.45 * e);
+      this.loadedMesh.rotation.z = (1 - e) * Math.PI * 2;
+      // Fresh NEXT pops up into the waiting slot.
+      this.nextWaitMesh.position.set(wait.x, wait.y, wait.z);
+      this.nextWaitMesh.scale.setScalar(0.55 * e);
+    } else {
+      var pulse = 1 + Math.sin(this.clock * 3.1) * 0.03;
+      this.loadedMesh.position.set(mouth.x, mouth.y, mouth.z);
+      this.loadedMesh.scale.setScalar(pulse);
+      this.loadedMesh.rotation.z = 0;
+      this.nextWaitMesh.position.set(wait.x, wait.y, wait.z);
+      this.nextWaitMesh.scale.setScalar(0.55);
+    }
+  };
+
   BubbleExRenderer.prototype.resize = function () {
     var w = this.canvas.clientWidth || window.innerWidth;
     var h = this.canvas.clientHeight || window.innerHeight;
@@ -129,7 +238,8 @@
     // Frame board height (rows*ROW_H + margin) within viewport.
     var boardH = C.ROWS * C.ROW_H + 140;
     var dist = (boardH / 2) / Math.tan((this.camera.fov * Math.PI / 180) / 2);
-    this.camera.position.set(0, 0, dist * 1.05);
+    this.camBaseZ = dist * 1.05;
+    this.camera.position.set(0, 0, this.camBaseZ);
     this.camera.near = Math.max(0.1, dist * 0.02);
     this.camera.far = dist * 4 + 1000; // シーン全体（背景の奥行き込み）を必ず含める
     this.camera.lookAt(0, 0, 0);
@@ -221,6 +331,14 @@
     return { x: x, y: -y };
   };
 
+  // Project board-logical coords to canvas CSS pixels (for DOM score popups).
+  BubbleExRenderer.prototype.projectToScreen = function (lx, ly) {
+    var v = new THREE.Vector3(lx - C.BOARD_W / 2, C.ROWS * C.ROW_H * 0.5 - ly, 0);
+    v.project(this.camera);
+    var w = this.canvas.clientWidth || 1, h = this.canvas.clientHeight || 1;
+    return { x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h };
+  };
+
   BubbleExRenderer.prototype.syncBoard = function (state, wobble) {
     var seen = {};
     var t = this.clock;
@@ -270,34 +388,195 @@
     this.shotMesh.position.set(pos.x, pos.y, 0);
   };
 
-  BubbleExRenderer.prototype.spawnPopBurst = function (cells, kind) {
+  // Kick the cannon reload animation (called on the game's 'snap' event).
+  BubbleExRenderer.prototype.triggerReload = function () {
+    this.reloadT = 0;
+    this.hadShot = false;
+  };
+
+  BubbleExRenderer.prototype.shake = function (dur, amp) {
+    this.shakeT = dur;
+    this.shakeDur = dur;
+    this.shakeAmp = amp;
+  };
+
+  // ---- Popcorn-chain pop sequence -----------------------------------------
+  // cells arrive in BFS order from the landing cell; each bubble expands for
+  // 40ms then bursts, staggered ~35ms apart, outward from the impact point.
+  var POP_STAGGER = 0.035;
+  var POP_EXPAND = 0.04;
+
+  BubbleExRenderer.prototype.spawnPopSequence = function (cells, opts) {
+    opts = opts || {};
+    var seq = { t: 0, cells: [], opts: opts, done: 0 };
     var self = this;
-    cells.forEach((cell) => {
+    cells.forEach(function (cell, i) {
       var pos = self.toScene(cell.x, cell.y);
-      var hex = COLOR_HEX[cell.color] || 0xffffff;
-      var n = kind === 'drop' ? 4 : 6;
-      for (var i = 0; i < n; i++) {
-        var isStar = kind === 'pop' && i === 0;
-        var geo = isStar ? self.starGeo : self.shardGeo;
-        var mat = new THREE.MeshStandardMaterial({ color: hex, emissive: 0x442200, emissiveIntensity: 0.3, roughness: 0.4 });
-        var mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(pos.x, pos.y, 0);
-        mesh.scale.setScalar(0.6 + Math.random() * 0.6);
-        self.particleGroup.add(mesh);
-        var speed = kind === 'drop' ? (20 + Math.random() * 30) : (60 + Math.random() * 90);
-        var ang = Math.random() * Math.PI * 2;
-        var upBias = kind === 'drop' ? -40 : 40;
-        self.particles.push({
-          mesh: mesh,
-          vx: Math.cos(ang) * speed,
-          vy: Math.sin(ang) * speed + upBias,
-          vz: (Math.random() - 0.5) * speed,
-          spin: (Math.random() - 0.5) * 8,
-          life: 0,
-          maxLife: kind === 'drop' ? 0.9 : 0.6
-        });
-      }
+      var ghost = new THREE.Mesh(self.geo, self.matFor(cell.color));
+      ghost.position.set(pos.x, pos.y, 0);
+      self.particleGroup.add(ghost);
+      seq.cells.push({
+        ghost: ghost,
+        color: cell.color,
+        x: pos.x, y: pos.y,
+        expandAt: i * POP_STAGGER,
+        idx: i,
+        bursted: false
+      });
     });
+    this.popSeqs.push(seq);
+  };
+
+  BubbleExRenderer.prototype.updatePopSeqs = function (dt) {
+    for (var s = this.popSeqs.length - 1; s >= 0; s--) {
+      var seq = this.popSeqs[s];
+      seq.t += dt;
+      for (var i = 0; i < seq.cells.length; i++) {
+        var cell = seq.cells[i];
+        if (cell.bursted) continue;
+        var local = seq.t - cell.expandAt;
+        if (local < 0) continue;
+        if (local < POP_EXPAND) {
+          // 40ms expansion to 1.15x before bursting
+          cell.ghost.scale.setScalar(1 + 0.15 * (local / POP_EXPAND));
+        } else {
+          this.burstCell(cell, seq.opts);
+          cell.bursted = true;
+          seq.done++;
+        }
+      }
+      if (seq.done >= seq.cells.length) this.popSeqs.splice(s, 1);
+    }
+  };
+
+  BubbleExRenderer.prototype.burstCell = function (cell, opts) {
+    var hex = COLOR_HEX[cell.color] || 0xffffff;
+    var escalated = (opts.total || 0) >= 5;
+    this.particleGroup.remove(cell.ghost);
+
+    // Glossy 3D shards of the bubble shell (6-8, more when escalated)
+    var nShards = 6 + Math.floor(Math.random() * 3) + (escalated ? 3 : 0);
+    for (var i = 0; i < nShards; i++) {
+      var mat = new THREE.MeshStandardMaterial({
+        color: hex, emissive: hex, emissiveIntensity: 0.25,
+        roughness: 0.15, metalness: 0.3, transparent: true
+      });
+      var mesh = new THREE.Mesh(this.shardGeo, mat);
+      mesh.position.set(cell.x, cell.y, 2);
+      mesh.scale.setScalar(0.7 + Math.random() * 0.6);
+      this.particleGroup.add(mesh);
+      var ang = (i / nShards) * Math.PI * 2 + Math.random() * 0.5;
+      var speed = 100 + Math.random() * 110;
+      this.particles.push({
+        mesh: mesh,
+        vx: Math.cos(ang) * speed,
+        vy: Math.sin(ang) * speed + 40,
+        vz: (Math.random() - 0.5) * 60,
+        spin: (Math.random() - 0.5) * 12,
+        life: 0, maxLife: 0.55 + Math.random() * 0.2
+      });
+    }
+
+    // White flash ring at the center (additive, always on top)
+    var ringMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthTest: false, side: THREE.DoubleSide
+    });
+    var ring = new THREE.Mesh(this.ringGeo, ringMat);
+    ring.position.set(cell.x, cell.y, 4);
+    ring.renderOrder = 900;
+    this.particleGroup.add(ring);
+    this.particles.push({ mesh: ring, vx: 0, vy: 0, vz: 0, spin: 0, life: 0, maxLife: 0.22, growTo: 3.4 });
+
+    // Colored star sparks (+rainbow ones when escalated)
+    var nSparks = 3 + Math.floor(Math.random() * 2) + (escalated ? 3 : 0);
+    for (var j = 0; j < nSparks; j++) {
+      var sparkHex = (escalated && j >= 3) ? RAINBOW[Math.floor(Math.random() * RAINBOW.length)] : hex;
+      var sparkMat = new THREE.MeshBasicMaterial({
+        color: sparkHex, transparent: true, opacity: 1,
+        blending: THREE.AdditiveBlending, depthTest: false, side: THREE.DoubleSide
+      });
+      var spark = new THREE.Mesh(this.sparkGeo, sparkMat);
+      spark.position.set(cell.x, cell.y, 5);
+      spark.renderOrder = 901;
+      spark.scale.setScalar(0.5 + Math.random() * 0.6);
+      this.particleGroup.add(spark);
+      var sAng = Math.random() * Math.PI * 2;
+      var sSpeed = 130 + Math.random() * 120;
+      this.particles.push({
+        mesh: spark,
+        vx: Math.cos(sAng) * sSpeed,
+        vy: Math.sin(sAng) * sSpeed + 30,
+        vz: 0,
+        spin: (Math.random() - 0.5) * 16,
+        life: 0, maxLife: 0.45 + Math.random() * 0.15
+      });
+    }
+
+    if (escalated) this.shake(0.18, 5);
+    if (opts.onBurst) {
+      try { opts.onBurst(cell.idx, cell); } catch (e) { console.error('onBurst error', e); }
+    }
+  };
+
+  // ---- Physics fall for detached (dropped) clusters ------------------------
+  // Visual only: logic already removed them from the grid. Gravity ~1800 logical
+  // px/s^2; each bubble gets a small random initial velocity and tumble.
+  var FALL_GRAVITY = 1800;
+
+  BubbleExRenderer.prototype.spawnFallingCluster = function (cells) {
+    var self = this;
+    cells.forEach(function (cell) {
+      var pos = self.toScene(cell.x, cell.y);
+      var mesh = new THREE.Mesh(self.geo, self.matFor(cell.color));
+      mesh.position.set(pos.x, pos.y, 0);
+      self.particleGroup.add(mesh);
+      self.fallGhosts.push({
+        mesh: mesh,
+        startY: pos.y,
+        vx: (Math.random() - 0.5) * 70,
+        vy: 20 + Math.random() * 50, // slight upward kick (scene +y), gravity takes over
+        spinX: (Math.random() - 0.5) * 6,
+        spinZ: (Math.random() - 0.5) * 6
+      });
+    });
+  };
+
+  BubbleExRenderer.prototype.updateFallGhosts = function (dt) {
+    var bottomY = -(C.ROWS * C.ROW_H + 180); // below launcher, past screen bottom
+    for (var i = this.fallGhosts.length - 1; i >= 0; i--) {
+      var g = this.fallGhosts[i];
+      g.vy -= FALL_GRAVITY * dt; // scene y up; falling = decreasing
+      g.mesh.position.x += g.vx * dt;
+      g.mesh.position.y += g.vy * dt;
+      g.mesh.rotation.x += g.spinX * dt;
+      g.mesh.rotation.z += g.spinZ * dt;
+      if (g.mesh.position.y < bottomY) {
+        // Tiny sparkle as it vanishes off-screen
+        for (var j = 0; j < 3; j++) {
+          var mat = new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0.9,
+            blending: THREE.AdditiveBlending, depthTest: false, side: THREE.DoubleSide
+          });
+          var star = new THREE.Mesh(this.sparkGeo, mat);
+          star.position.copy(g.mesh.position);
+          star.position.y = bottomY + 8;
+          star.renderOrder = 901;
+          star.scale.setScalar(0.35 + Math.random() * 0.3);
+          this.particleGroup.add(star);
+          this.particles.push({
+            mesh: star,
+            vx: (Math.random() - 0.5) * 80,
+            vy: 60 + Math.random() * 60,
+            vz: 0,
+            spin: (Math.random() - 0.5) * 10,
+            life: 0, maxLife: 0.35
+          });
+        }
+        this.particleGroup.remove(g.mesh);
+        this.fallGhosts.splice(i, 1);
+      }
+    }
   };
 
   BubbleExRenderer.prototype.updateParticles = function (dt) {
@@ -306,25 +585,33 @@
       p.life += dt;
       if (p.life >= p.maxLife) {
         this.particleGroup.remove(p.mesh);
-        p.mesh.geometry = null;
         this.particles.splice(i, 1);
         continue;
       }
-      p.vy -= 140 * dt; // gravity
+      var k = p.life / p.maxLife;
+      if (p.growTo) {
+        // Flash ring: expand + fade, no motion
+        var s = 1 + (p.growTo - 1) * k;
+        p.mesh.scale.setScalar(s);
+        p.mesh.material.opacity = 0.9 * (1 - k);
+        continue;
+      }
+      p.vy -= 260 * dt; // light gravity on debris
       p.mesh.position.x += p.vx * dt;
       p.mesh.position.y += p.vy * dt;
       p.mesh.position.z += p.vz * dt;
       p.mesh.rotation.x += p.spin * dt;
       p.mesh.rotation.y += p.spin * dt * 0.7;
-      var k = 1 - p.life / p.maxLife;
-      p.mesh.scale.setScalar(Math.max(0.05, k) * (0.6 + Math.random() * 0.05));
-      if (p.mesh.material) p.mesh.material.opacity = k, p.mesh.material.transparent = true;
+      p.mesh.scale.setScalar(Math.max(0.05, p.mesh.scale.x * (1 - dt * 1.2)));
+      if (p.mesh.material) {
+        p.mesh.material.transparent = true;
+        p.mesh.material.opacity = 1 - k;
+      }
     }
   };
 
   BubbleExRenderer.prototype.updateBackground = function (dt) {
     if (this._floor) this._floor.rotation.z += dt * 0.03;
-    var self = this;
     if (this._floaters) {
       this._floaters.forEach((f) => {
         f.orbit += dt * 0.05;
@@ -340,11 +627,23 @@
     this.clock += dt;
     this.updateBackground(dt);
     this.updateParticles(dt);
+    this.updatePopSeqs(dt);
+    this.updateFallGhosts(dt);
     this.syncBoard(state, true);
     this.syncShot(state.shot);
     if (launchPos) {
       this.updateLauncher(launchPos, state.aimDeg);
       this.updateAimLine(launchPos, state.aimDeg, showAim && !state.shot);
+      this.updateCannonBubbles(state, launchPos, dt);
+    }
+    // Camera shake (translation-only jitter, decaying)
+    if (this.shakeT > 0) {
+      this.shakeT = Math.max(0, this.shakeT - dt);
+      var f = this.shakeT / this.shakeDur;
+      var amp = this.shakeAmp * f;
+      this.camera.position.set((Math.random() - 0.5) * 2 * amp, (Math.random() - 0.5) * 2 * amp, this.camBaseZ);
+    } else {
+      this.camera.position.set(0, 0, this.camBaseZ);
     }
     this.renderer.render(this.scene, this.camera);
   };

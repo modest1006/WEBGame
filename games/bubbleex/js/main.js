@@ -15,12 +15,15 @@
   renderer.resize();
   var audio = new window.BubbleExAudio();
   var debug = window.installBubbleExDebug(game);
-  window.__renderOnce = function () {
+  // Pump one frame. Optional dtMs advances renderer-side effect timelines
+  // (pop chains, falling clusters, particles) deterministically without rAF.
+  window.__renderOnce = function (dtMs) {
     try {
       if (canvas.width === 0 || canvas.height === 0) renderer.resize();
-      renderer.render(game.getState(), 0, game.launcherPos(), true);
+      renderer.render(game.getState(), (dtMs || 0) / 1000, game.launcherPos(), true);
     } catch (e) { console.error('renderOnce error', e); }
   };
+  window.__renderer = renderer; // debug/inspection aid (effect state, projection)
 
   var $ = function (id) { return document.getElementById(id); };
   var overlay = $('overlay');
@@ -35,20 +38,40 @@
     yellow: '#ffd438', purple: '#b861ff', orange: '#ff9a2e'
   };
 
-  function chainIndex() { return game.comboMult || 1; }
+  // Floating score number (DOM) at a board-logical position.
+  function spawnScorePopup(points, lx, ly, kind) {
+    var wrap = document.querySelector('.screen-wrap');
+    if (!wrap) return;
+    var p = renderer.projectToScreen(lx, ly);
+    var el = document.createElement('div');
+    el.className = 'score-pop' + (kind === 'drop' ? ' drop' : '');
+    el.textContent = '+' + points;
+    el.style.left = Math.round(p.x) + 'px';
+    el.style.top = Math.round(p.y) + 'px';
+    wrap.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 950);
+  }
 
   game.on(function (type, data) {
     try {
       switch (type) {
         case 'fire': audio.fire(); break;
         case 'wallbounce': audio.wallbounce(); break;
+        case 'snap': renderer.triggerReload(); break;
         case 'pop':
-          audio.pop(data.count);
-          renderer.spawnPopBurst(data.cells, 'pop');
+          // Popcorn chain: renderer staggers bursts; play one rising blip per bubble.
+          renderer.spawnPopSequence(data.cells, {
+            total: data.total,
+            mult: data.mult,
+            onBurst: function (i) { audio.pop(i + 1); }
+          });
           break;
         case 'drop':
           audio.dropBonus(data.count);
-          renderer.spawnPopBurst(data.cells, 'drop');
+          renderer.spawnFallingCluster(data.cells);
+          break;
+        case 'scorepop':
+          spawnScorePopup(data.points, data.x, data.y, data.kind);
           break;
         case 'combo':
           showCutin(data.mult + ' COMBO!!');

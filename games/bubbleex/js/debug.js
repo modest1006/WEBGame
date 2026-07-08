@@ -26,6 +26,7 @@
       setBubble: function (color) { return game.setBubble(color); },
       setStage: function (n) { return game.setStage(n); },
       clearBoard: function () { return game.clearBoard(); },
+      setCell: function (row, col, color) { return game.setCell(row, col, color); },
       win: function () { return game.win(); },
       lose: function () { return game.lose(); },
       shootAt: function (row, col) { return game.shootAt(row, col); },

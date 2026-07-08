@@ -279,16 +279,17 @@
     return best;
   };
 
+  // BFS flood fill: returned cells are ordered by connection distance from the
+  // origin cell, so the renderer can pop them popcorn-style outward from impact.
   BubbleExGame.prototype.floodSameColor = function (row, col) {
     var color = this.grid[key(row, col)];
     if (!color) return [];
     var seen = {};
-    var stack = [[row, col]];
-    var out = [];
+    var queue = [[row, col]];
+    var head = 0;
     seen[key(row, col)] = true;
-    while (stack.length) {
-      var cur = stack.pop();
-      out.push(cur);
+    while (head < queue.length) {
+      var cur = queue[head++];
       var ns = neighbors(cur[0], cur[1]);
       for (var i = 0; i < ns.length; i++) {
         var nr = ns[i][0], nc = ns[i][1];
@@ -296,11 +297,11 @@
         if (seen[kk]) continue;
         if (this.grid[kk] === color) {
           seen[kk] = true;
-          stack.push([nr, nc]);
+          queue.push([nr, nc]);
         }
       }
     }
-    return out;
+    return queue;
   };
 
   // BFS from all row-0 cells across existing bubbles -> ceiling-connected set.
@@ -324,40 +325,49 @@
     return seen;
   };
 
+  function centroidOf(cells) {
+    var sx = 0, sy = 0;
+    cells.forEach(function (c) { sx += c.x; sy += c.y; });
+    return { x: sx / cells.length, y: sy / cells.length };
+  }
+
   BubbleExGame.prototype.resolvePops = function (row, col) {
     var cluster = this.floodSameColor(row, col);
     var popped = [];
     var dropped = [];
     var popColor = this.grid[key(row, col)];
     if (cluster.length >= 3) {
-      popped = cluster;
+      // BFS order preserved: index = chain distance from the landing cell.
+      popped = cluster.map((c) => ({ row: c[0], col: c[1], x: cellX(c[0], c[1]), y: cellY(c[0]), color: popColor }));
       cluster.forEach((c) => { delete this.grid[key(c[0], c[1])]; });
       var connected = this.ceilingConnected();
       var allKeys = Object.keys(this.grid);
       allKeys.forEach((kk) => {
         if (!connected[kk]) {
           var row2 = Math.floor(kk / 64), col2 = kk % 64;
-          dropped.push([row2, col2]);
+          dropped.push({ row: row2, col: col2, x: cellX(row2, col2), y: cellY(row2), color: this.grid[kk] });
           delete this.grid[kk];
         }
       });
     }
-    var comboScore = 0;
-    if (popped.length) {
-      var popPts = popped.length * C.SCORE.POP_BASE;
-      comboScore += popPts;
-      this.emit('pop', { cells: popped.map((c) => ({ row: c[0], col: c[1], x: cellX(c[0], c[1]), y: cellY(c[0]), color: popColor })), count: popped.length });
-    }
-    if (dropped.length) {
-      var dropPts = dropped.length * C.SCORE.DROP_BASE;
-      comboScore += dropPts;
-      this.emit('drop', { cells: dropped.map((c) => ({ row: c[0], col: c[1], x: cellX(c[0], c[1]), y: cellY(c[0]), color: popColor })), count: dropped.length });
-    }
     var totalCleared = popped.length + dropped.length;
+    var mult = totalCleared >= 12 ? 4 : totalCleared >= 8 ? 3 : totalCleared >= 5 ? 2 : 1;
+    var comboScore = 0;
+    if (popped.length) comboScore += popped.length * C.SCORE.POP_BASE;
+    if (dropped.length) comboScore += dropped.length * C.SCORE.DROP_BASE;
     if (totalCleared > 0) {
-      var mult = totalCleared >= 12 ? 4 : totalCleared >= 8 ? 3 : totalCleared >= 5 ? 2 : 1;
       this.comboMult = mult;
       this.score += Math.round(comboScore * mult);
+      if (popped.length) {
+        this.emit('pop', { cells: popped, count: popped.length, total: totalCleared, mult: mult });
+        var pc = centroidOf(popped);
+        this.emit('scorepop', { points: popped.length * C.SCORE.POP_BASE * mult, x: pc.x, y: pc.y, kind: 'pop' });
+      }
+      if (dropped.length) {
+        this.emit('drop', { cells: dropped, count: dropped.length, total: totalCleared, mult: mult });
+        var dc = centroidOf(dropped);
+        this.emit('scorepop', { points: dropped.length * C.SCORE.DROP_BASE * mult, x: dc.x, y: dc.y, kind: 'drop' });
+      }
       if (mult > 1) {
         this.cutIn = { text: mult + ' COMBO!!', t: 0, dur: 1100 };
         this.emit('combo', { mult: mult });
@@ -553,6 +563,18 @@
   BubbleExGame.prototype.clearBoard = function () {
     this.grid = {};
     return this.getState();
+  };
+
+  // Debug: place/remove a single cell directly (color=null clears the cell).
+  BubbleExGame.prototype.setCell = function (row, col, color) {
+    if (row < 0 || row >= C.ROWS || col < 0 || col >= rowColCount(row)) return false;
+    if (color === null || color === undefined) {
+      delete this.grid[key(row, col)];
+      return true;
+    }
+    if (C.COLORS.indexOf(color) === -1) return false;
+    this.grid[key(row, col)] = color;
+    return true;
   };
 
   BubbleExGame.prototype.win = function () {
