@@ -73,6 +73,11 @@
     // Camera looks straight at board along -Z.
     // 子はY反転(0..-boardH)で置かれるため、中心を原点に合わせるオフセットは「+boardH/2」
     this.boardGroup.position.set(-C.BOARD_W / 2, C.ROWS * C.ROW_H * 0.5, 0);
+    // Pop shards, falling ghosts and sparks are all computed in the same board-logical
+    // space via toScene(), so the particle group must carry the SAME offset as the board.
+    // Without this they spawn shifted by (+BOARD_W/2, -ROWS*ROW_H/2) — off the bottom-right
+    // (off-screen on mobile portrait), which hid the popcorn-chain and fall effects entirely.
+    this.particleGroup.position.copy(this.boardGroup.position);
 
     this.buildLauncher();
   }
@@ -645,7 +650,25 @@
     } else {
       this.camera.position.set(0, 0, this.camBaseZ);
     }
-    this.renderer.render(this.scene, this.camera);
+    // Two-pass render to GUARANTEE the stage background sits strictly behind every
+    // foreground object. The tilted floor plane is large enough that its near edge would
+    // otherwise poke forward past the play plane (Z=0) and occlude bottom bubbles / the
+    // loaded ball. Pass 1 draws only the background; we then wipe the depth buffer so
+    // pass 2 (board + particles + aim) always paints on top regardless of Z overlap.
+    var r = this.renderer;
+    this.boardGroup.visible = false;
+    this.particleGroup.visible = false;
+    this.stageBgGroup.visible = true;
+    r.autoClear = true;
+    r.render(this.scene, this.camera);
+    this.boardGroup.visible = true;
+    this.particleGroup.visible = true;
+    this.stageBgGroup.visible = false;
+    r.autoClear = false;
+    r.clearDepth();
+    r.render(this.scene, this.camera);
+    this.stageBgGroup.visible = true;
+    r.autoClear = true;
   };
 
   window.BubbleExRenderer = BubbleExRenderer;
