@@ -149,9 +149,33 @@
   };
 
   GhostLensGame.prototype.spawnRandomGhost = function () {
-    const roll = this.rng.next();
-    const type = roll < .4 ? 'drifter' : roll < .65 ? 'crawler' : roll < .85 ? 'doll' : roll < .95 ? 'mirror' : 'gold';
+    const type = this.rollGhostType();
     return this.spawnGhost(type, this.rng.range(-180, 180), this.rng.range(-30, 45), true);
+  };
+
+  GhostLensGame.prototype.getSpawnWeights = function () {
+    const early = { drifter:.56, crawler:.11, doll:.28, mirror:.04, gold:.01 };
+    const late = { drifter:.18, crawler:.34, doll:.12, mirror:.23, gold:.13 };
+    const elapsed = clamp(this.elapsedMs, 0, 90000);
+    if (elapsed <= 30000) return early;
+    if (elapsed >= 60000) return late;
+    const mix = (elapsed - 30000) / 30000;
+    const weights = {};
+    const types = ['drifter','crawler','doll','mirror','gold'];
+    for (let i=0;i<types.length;i++) weights[types[i]] = late[types[i]] * mix + early[types[i]] * (1-mix);
+    return weights;
+  };
+
+  GhostLensGame.prototype.rollGhostType = function () {
+    const weights = this.getSpawnWeights();
+    const roll = this.rng.next();
+    let total = 0;
+    const types = ['drifter','crawler','doll','mirror','gold'];
+    for (let i=0;i<types.length;i++) {
+      total += weights[types[i]];
+      if (roll < total) return types[i];
+    }
+    return 'gold';
   };
 
   GhostLensGame.prototype.spawnGhost = function (type, yawDeg, pitchDeg, automatic) {
@@ -450,9 +474,11 @@
         this.focusMs = 0;
         this.emit('focusEnter', { id:focusCandidate.id, type:focusCandidate.type });
       }
-      this.focusMs = Math.min(FOCUS_MS, this.focusMs + dtMs);
+      const previousFocusMs = this.focusMs;
+      const focusGain = dtMs * (this.camera.zoom ? 1.3 : 1);
+      this.focusMs = Math.min(FOCUS_MS, this.focusMs + focusGain);
       focusCandidate.focusMs = this.focusMs;
-      if (this.focusMs === FOCUS_MS && this.focusMs - dtMs < FOCUS_MS) {
+      if (this.focusMs === FOCUS_MS && previousFocusMs < FOCUS_MS) {
         this.emit('focusLock', { id:focusCandidate.id, type:focusCandidate.type });
       }
     } else {
@@ -660,7 +686,7 @@
       clockChimed:this.clockChimed,
       camera:{ yaw:Number(this.camera.yaw.toFixed(3)), pitch:Number(this.camera.pitch.toFixed(3)), zoom:this.camera.zoom },
       ghosts:this.ghosts.map(this.copyGhost.bind(this)),
-      focus:{ ghostId:this.focusGhostId, ms:Math.round(this.focusMs), progress:Number((this.focusMs / FOCUS_MS).toFixed(3)), locked:this.focusMs >= FOCUS_MS },
+      focus:{ ghostId:this.focusGhostId, ms:Math.round(this.focusMs), progress:Number((this.focusMs / FOCUS_MS).toFixed(3)), locked:this.focusMs >= FOCUS_MS, rate:this.camera.zoom ? 1.3 : 1 },
       film:this.film,
       maxFilm:MAX_FILM,
       reloading:this.reloadMs > 0,
@@ -696,7 +722,8 @@
       }),
       bestScore:this.bestScore,
       newRecord:this.newRecord,
-      lastQuality:this.lastQuality
+      lastQuality:this.lastQuality,
+      spawnWeights:this.getSpawnWeights()
     };
   };
 

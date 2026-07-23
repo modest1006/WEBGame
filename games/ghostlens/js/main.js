@@ -18,8 +18,13 @@
   const muteButton=document.getElementById('mute-btn');
   const zoomButton=document.getElementById('zoom-btn');
   const restartButton=document.getElementById('restart-btn');
+  const dexButton=document.getElementById('dex-btn');
+  const dexCloseButton=document.getElementById('dex-close-btn');
   const dateStamp=document.getElementById('date-stamp');
   const debugOverlay=document.getElementById('debug-overlay');
+  let progressionStorage=null;
+  try{progressionStorage=window.localStorage;}catch(error){}
+  const progression=new GhostLensProgression(progressionStorage);
 
   let renderer=null;
   let audio=null;
@@ -32,10 +37,19 @@
     try{
       if(audio)audio.handleEvent(type,data);
       if(renderer)renderer.handleEvent(type,data);
-      if(type==='capture')slowMotionMs=300+(data.hitStopMs||0);
+      if(type==='capture'){
+        slowMotionMs=300+(data.hitStopMs||0);
+        const photo=game.getState().photos.find(function(item){return item.id===data.photoId;});
+        progression.recordCapture(data,photo);
+        if(renderer)renderer.updateProgression(progression.getState());
+      }
       if(type==='finish'){
         try{localStorage.setItem('ghostlens-best',String(game.bestScore));}catch(error){}
-        if(renderer)renderer.showResult(game.getState());
+        const resultMeta=progression.recordResult(game.score);
+        if(renderer){
+          renderer.updateProgression(progression.getState());
+          renderer.showResult(game.getState(),resultMeta);
+        }
         hud.classList.add('hidden');
       }
     }catch(error){console.error('[GHOST LENS event boundary]',type,error);}
@@ -44,6 +58,7 @@
   const game=new GhostLensGame({seed:seed,bestScore:bestScore,jumpscareEnabled:jumpscareEnabled,onEvent:eventBoundary});
   audio=new GhostLensAudio();
   renderer=new GhostLensRenderer({canvas:canvas,game:game});
+  renderer.updateProgression(progression.getState());
   input=new GhostLensInput({
     surface:canvas,
     onShutter:function(){game.shutter();},
@@ -66,6 +81,7 @@
   function beginPlay(){
     titleScreen.classList.add('hidden');
     resultScreen.classList.add('hidden');
+    renderer.hideDex();
     hud.classList.remove('hidden');
     game.start();
     lastTime=performance.now();
@@ -139,6 +155,12 @@
     renderer.showMessage('CASE REOPENED','');
     lastTime=performance.now();
   });
+  dexButton.addEventListener('click',function(){
+    renderer.showDex(progression.getState());
+  });
+  dexCloseButton.addEventListener('click',function(){
+    renderer.hideDex();
+  });
 
   function frame(now){
     try{
@@ -177,6 +199,7 @@
     input:input,
     audio:audio,
     renderer:renderer,
+    progression:progression,
     beginPlay:beginPlay,
     setDebugVisible:setDebugVisible
   };

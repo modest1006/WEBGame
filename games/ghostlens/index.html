@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#05080a">
   <title>GHOST LENS 〜心霊写真館〜</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/style.css?v=3">
+  <link rel="stylesheet" href="css/style.css?v=4">
 </head>
 <body>
   <main id="game-shell" class="game-shell">
@@ -55,7 +55,7 @@
           <span>EMF</span>
           <div class="emf-gauge"><i id="emf-needle"></i><b>0</b><b>5</b></div>
         </div>
-        <div class="film-panel">
+        <div id="film-panel" class="film-panel">
           <span>FILM</span><b id="film-value">12</b><small>/ 12</small>
           <div id="reload-bar" class="reload-bar"><i></i></div>
         </div>
@@ -70,6 +70,7 @@
     </section>
 
     <div id="message" class="message" aria-live="polite"></div>
+    <div id="lost-indicator" class="lost-indicator" aria-live="polite">LOST…</div>
     <div id="polaroid-tray" class="polaroid-tray" aria-hidden="true"></div>
 
     <section id="title-screen" class="screen title-screen">
@@ -77,6 +78,11 @@
       <div class="title-dust" aria-hidden="true"></div>
       <div class="title-content">
         <p class="eyebrow">ABANDONED MANOR / CASE 07</p>
+        <div id="title-progress" class="title-progress">
+          <span>BEST TITLE</span><b id="title-best-title">未鑑定</b>
+          <i id="dex-medal" class="dex-medal" aria-label="怪異図鑑完成">五怪封緘</i>
+        </div>
+        <button id="dex-btn" class="secondary-btn dex-btn" type="button">怪異図鑑</button>
         <h1><span>GHOST</span> LENS</h1>
         <h2>ゴーストレンズ <small>〜心霊写真館〜</small></h2>
         <p class="tagline">見えないものは、音のする方にいる。</p>
@@ -87,11 +93,26 @@
       </div>
     </section>
 
+    <section id="dex-screen" class="screen dex-screen hidden" aria-labelledby="dex-title">
+      <header class="dex-header">
+        <p>APPRAISAL ARCHIVE / CASE 07</p>
+        <h2 id="dex-title">怪異図鑑</h2>
+        <span id="dex-progress">0 / 5</span>
+        <i id="dex-seal" class="dex-seal" aria-hidden="true">五怪<br>封緘</i>
+      </header>
+      <div id="dex-grid" class="dex-grid"></div>
+      <button id="dex-close-btn" class="dex-close-btn" type="button">鑑定書を閉じる</button>
+    </section>
+
     <section id="result-screen" class="screen result-screen hidden" aria-labelledby="result-title">
       <div class="result-header">
         <p>DEVELOPMENT COMPLETE</p>
         <h2 id="result-title">心霊写真鑑定書</h2>
         <div id="new-record-stamp" class="new-record-stamp" aria-hidden="true">NEW RECORD</div>
+        <div id="result-rank" class="result-rank">
+          <span>鑑定称号</span><b id="result-rank-name">見習い霊能写真家</b>
+          <i id="promotion-stamp" class="promotion-stamp" aria-hidden="true">昇格</i>
+        </div>
         <div class="result-stats">
           <div><span>SCORE</span><b id="result-score">0</b></div>
           <div><span>CAPTURED</span><b id="result-captures">0</b></div>
@@ -111,11 +132,12 @@
   </main>
 
   <script src="lib/three.min.js"></script>
-  <script src="js/game.js?v=3"></script>
-  <script src="js/input.js?v=3"></script>
-  <script src="js/audio.js?v=3"></script>
-  <script src="js/renderer.js?v=3"></script>
-  <script src="js/main.js?v=3"></script>
-  <script src="js/debug.js?v=3"></script>
+  <script src="js/progression.js?v=4"></script>
+  <script src="js/game.js?v=4"></script>
+  <script src="js/input.js?v=4"></script>
+  <script src="js/audio.js?v=4"></script>
+  <script src="js/renderer.js?v=4"></script>
+  <script src="js/main.js?v=4"></script>
+  <script src="js/debug.js?v=4"></script>
 </body>
 </html>

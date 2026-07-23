@@ -17,6 +17,7 @@
     snapshot.input=rt.input.getState();
     snapshot.audio=rt.audio.getState();
     snapshot.renderer=rt.renderer.getInfo();
+    snapshot.progression=rt.progression.getState();
     return snapshot;
   }
 
@@ -58,6 +59,31 @@
     reloadFilm:function(){return ensurePlay().game.reloadFilm();},
     setFilm:function(n){return ensurePlay().game.setFilm(n);},
     triggerJumpscare:function(){return ensurePlay().game.triggerJumpscare();},
+    getDex:function(){return runtime().progression.getState();},
+    titleForScore:function(score){return GhostLensProgression.titleForScore(score);},
+    sampleGhosts:function(count,elapsedSec,seed){
+      const total=Math.max(1,Math.min(10000,Math.floor(Number(count)||100)));
+      const probe=new GhostLensGame({seed:Number(seed)||runtime().game.seed,jumpscareEnabled:false});
+      probe.elapsedMs=Math.max(0,Math.min(90000,(Number(elapsedSec)||0)*1000));
+      const counts={drifter:0,crawler:0,doll:0,mirror:0,gold:0};
+      for(let i=0;i<total;i++)counts[probe.rollGhostType()]++;
+      return{seed:probe.seed,elapsedSec:probe.elapsedMs/1000,total:total,weights:probe.getSpawnWeights(),counts:counts};
+    },
+    auditLayout:function(){
+      const selectors=['#dex-screen','.dex-header','#dex-grid','.dex-entry','#result-rank','#photo-lightbox img'];
+      const items=selectors.map(function(selector){
+        const element=document.querySelector(selector);
+        if(!element)return{selector:selector,present:false,overflow:false};
+        const rect=element.getBoundingClientRect();
+        return{
+          selector:selector,
+          present:true,
+          rect:{left:Number(rect.left.toFixed(2)),top:Number(rect.top.toFixed(2)),right:Number(rect.right.toFixed(2)),bottom:Number(rect.bottom.toFixed(2)),width:Number(rect.width.toFixed(2)),height:Number(rect.height.toFixed(2))},
+          overflow:rect.left < -.5 || rect.right > window.innerWidth+.5
+        };
+      });
+      return{viewport:{width:window.innerWidth,height:window.innerHeight},overflowCount:items.filter(function(item){return item.overflow;}).length,items:items};
+    },
     restart:function(){
       const rt=runtime();
       rt.game.reset();

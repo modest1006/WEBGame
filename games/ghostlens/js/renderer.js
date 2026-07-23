@@ -54,6 +54,7 @@
       score:document.getElementById('score-value'),
       combo:document.getElementById('combo-value'),
       film:document.getElementById('film-value'),
+      filmPanel:document.getElementById('film-panel'),
       reload:document.getElementById('reload-bar'),
       focusRing:document.getElementById('focus-ring'),
       reticle:document.getElementById('reticle'),
@@ -69,13 +70,22 @@
       perfectStamp:document.getElementById('perfect-stamp'),
       scorePopLayer:document.getElementById('score-pop-layer'),
       message:document.getElementById('message'),
+      lost:document.getElementById('lost-indicator'),
       polaroid:document.getElementById('polaroid-tray'),
+      dex:document.getElementById('dex-screen'),
+      dexGrid:document.getElementById('dex-grid'),
+      dexProgress:document.getElementById('dex-progress'),
+      dexSeal:document.getElementById('dex-seal'),
+      titleBest:document.getElementById('title-best-title'),
+      dexMedal:document.getElementById('dex-medal'),
       result:document.getElementById('result-screen'),
       album:document.getElementById('album'),
       resultScore:document.getElementById('result-score'),
       resultCaptures:document.getElementById('result-captures'),
       resultCombo:document.getElementById('result-combo'),
       resultBest:document.getElementById('result-best'),
+      resultRank:document.getElementById('result-rank-name'),
+      promotion:document.getElementById('promotion-stamp'),
       newRecord:document.getElementById('new-record-stamp'),
       lightbox:document.getElementById('photo-lightbox'),
       lightboxImage:document.getElementById('photo-lightbox-image'),
@@ -822,7 +832,51 @@
     tray.className='polaroid-tray';void tray.offsetWidth;tray.classList.add('eject');
   };
 
-  GhostLensRenderer.prototype.showResult = function (state) {
+  GhostLensRenderer.prototype.updateProgression = function (progress) {
+    if(!progress)return;
+    this.dom.titleBest.textContent=progress.bestTitle.name;
+    this.dom.dexMedal.classList.toggle('active',!!progress.complete);
+  };
+
+  GhostLensRenderer.prototype.showDex = function (progress) {
+    if(!progress)return;
+    this.dom.dexGrid.innerHTML='';
+    this.dom.dexProgress.textContent=progress.discovered+' / '+progress.total;
+    this.dom.dexSeal.classList.toggle('active',!!progress.complete);
+    for(let i=0;i<progress.entries.length;i++){
+      const entry=progress.entries[i];
+      const article=document.createElement('article');
+      article.className='dex-entry'+(entry.discovered?'':' locked');
+      article.dataset.type=entry.type;
+      const photo=document.createElement('div');
+      photo.className='dex-photo';
+      if(entry.discovered&&entry.bestPhoto){
+        const image=document.createElement('img');
+        image.src=entry.bestPhoto;
+        image.alt=entry.name+'の最高得点写真';
+        photo.appendChild(image);
+      }
+      const details=document.createElement('div');
+      const heading=document.createElement('h3');
+      heading.textContent=entry.discovered?entry.name:'？？？';
+      const record=document.createElement('div');
+      record.className='dex-record';
+      record.innerHTML='<span>撮影 <b>'+entry.count+'</b> 回</span><span>最良 <b>'+(entry.bestQuality||'---')+'</b></span><span>写真 <b>+'+entry.bestScore+'</b></span>';
+      const flavor=document.createElement('p');
+      flavor.className='dex-flavor';
+      flavor.textContent=entry.discovered?entry.flavor:'記録は黒く塗り潰されている。\\n撮影による照合を要す。';
+      details.appendChild(heading);details.appendChild(record);details.appendChild(flavor);
+      article.appendChild(photo);article.appendChild(details);
+      this.dom.dexGrid.appendChild(article);
+    }
+    this.dom.dex.classList.remove('hidden');
+  };
+
+  GhostLensRenderer.prototype.hideDex = function () {
+    this.dom.dex.classList.add('hidden');
+  };
+
+  GhostLensRenderer.prototype.showResult = function (state, meta) {
     this.resultRunId++;
     const runId=this.resultRunId;
     for(let t=0;t<this.resultTimers.length;t++)clearTimeout(this.resultTimers[t]);
@@ -834,6 +888,8 @@
     this.dom.resultCombo.textContent=String(state.maxCombo);
     this.dom.resultBest.textContent=String(state.bestScore);
     this.dom.newRecord.classList.toggle('active',!!state.newRecord);
+    this.dom.resultRank.textContent=meta&&meta.title?meta.title:'見習い霊能写真家';
+    this.dom.promotion.classList.toggle('active',!!(meta&&meta.promoted));
     this.dom.album.innerHTML='';
     for(let i=0;i<state.photos.length;i++){
       const p=state.photos[i];
@@ -892,6 +948,21 @@
     for(let i=0;i<expanded.length;i++)expanded[i].classList.remove('expanded');
   };
 
+  GhostLensRenderer.prototype.showLost = function () {
+    const lost=this.dom.lost;
+    lost.className='lost-indicator';
+    void lost.offsetWidth;
+    lost.classList.add('show');
+  };
+
+  GhostLensRenderer.prototype.showDryFire = function () {
+    const panel=this.dom.filmPanel;
+    panel.classList.remove('dry-fire');
+    void panel.offsetWidth;
+    panel.classList.add('dry-fire');
+    setTimeout(function(){panel.classList.remove('dry-fire');},820);
+  };
+
   GhostLensRenderer.prototype.handleEvent = function (type, data) {
     if(type==='capture'){
       this.flash(false);
@@ -908,6 +979,8 @@
       this.showMessage('DEVELOPING…','');
     }else if(type==='reloadComplete'){
       this.showMessage('FILM LOADED','');
+    }else if(type==='dryFire'){
+      if(data.reloading)this.showDryFire();
     }else if(type==='crawlerAttack'){
       this.dom.shell.classList.add('shaking');this.showMessage('SIGNAL HIJACKED','');
       setTimeout(function(){document.getElementById('game-shell').classList.remove('shaking');},900);
@@ -918,10 +991,12 @@
     }else if(type==='clockChime'){
       this.showMessage('XII','');
     }else if(type==='expired'){
-      this.showMessage(data.type==='gold'?'RARE SIGNAL LOST':'SIGNAL LOST','');
+      this.showLost();
     }else if(type==='reset'||type==='start'){
       this.closePhoto();
+      this.hideDex();
       this.dom.newRecord.classList.remove('active');
+      this.dom.promotion.classList.remove('active');
     }
     if(type==='capture'&&data.type==='mirror'){
       this.mirrorCrackTimer=2.1;
@@ -943,7 +1018,9 @@
       effects:this.effects.length,
       animationTimeMs:Math.round(this.time*1000),
       albumItems:this.dom.album.children.length,
-      lightboxOpen:this.dom.lightbox.classList.contains('open')
+      lightboxOpen:this.dom.lightbox.classList.contains('open'),
+      dexItems:this.dom.dexGrid.children.length,
+      dexOpen:!this.dom.dex.classList.contains('hidden')
     };
   };
 

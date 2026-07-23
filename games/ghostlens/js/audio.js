@@ -389,6 +389,13 @@
     this.shutter();
     this.tone(98, .22, .045, 'sawtooth', this.master, this.context.currentTime + .1);
   };
+  GhostLensAudio.prototype.dryFire = function () {
+    if(!this.context)return;
+    const now=this.context.currentTime;
+    this.noiseBurst(.028,.075,950);
+    this.tone(72,.045,.07,'square',this.master,now);
+    this.tone(49,.035,.045,'square',this.master,now+.035);
+  };
   GhostLensAudio.prototype.reload = function () {
     if (!this.context) return;
     const now = this.context.currentTime;
@@ -507,6 +514,7 @@
       if (type === 'focusLock') this.focusLock();
       else if (type === 'capture') { if(data.quality==='PERFECT')this.perfectShutter();else this.shutter(); this.banish(data.type); }
       else if (type === 'blur') this.blur();
+      else if (type === 'dryFire' && data.reloading) this.dryFire();
       else if (type === 'reloadStart') this.reload();
       else if (type === 'crawlerAttack') this.attack();
       else if (type === 'crawlerAttackPhase') this.setAttackPhase(data.phase);
@@ -532,6 +540,7 @@
     this.focusLock();
     this.shutter();
     this.perfectShutter();
+    this.dryFire();
     this.reload();
     this.banish('drifter');
     this.banish('crawler');
