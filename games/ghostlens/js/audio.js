@@ -16,6 +16,12 @@
     this.crawlerStepTimer = 0;
     this.dollLullabyTimer = 1.8;
     this.mirrorTapTimer = 1.1;
+    this.percussionTimer = 0;
+    this.dangerHeartbeatTimer = 0;
+    this.gustActive = false;
+    this.droneOscillators = [];
+    this.reverb = null;
+    this.reverbGain = null;
   }
 
   GhostLensAudio.prototype.unlock = function () {
@@ -36,6 +42,17 @@
       this.presenceGain = ctx.createGain();
       this.presenceGain.gain.value = .34;
       this.presenceGain.connect(this.master);
+      this.reverb = ctx.createConvolver();
+      const reverbLength = Math.floor(ctx.sampleRate * 1.15);
+      const impulse = ctx.createBuffer(2, reverbLength, ctx.sampleRate);
+      for (let channel=0;channel<2;channel++) {
+        const samples=impulse.getChannelData(channel);
+        for (let i=0;i<reverbLength;i++) samples[i]=(Math.random()*2-1)*Math.pow(1-i/reverbLength,2.7);
+      }
+      this.reverb.buffer=impulse;
+      this.reverbGain=ctx.createGain();
+      this.reverbGain.gain.value=.24;
+      this.reverb.connect(this.reverbGain).connect(this.master);
       this.startAmbience();
       this.unlocked = true;
       if (ctx.state === 'suspended') ctx.resume().catch(function () {});
@@ -62,6 +79,7 @@
     drone2.connect(g2).connect(filter);
     filter.connect(this.ambientGain);
     drone.start(now); drone2.start(now);
+    this.droneOscillators=[{osc:drone,base:43},{osc:drone2,base:47.5}];
 
     const wind = ctx.createBufferSource();
     wind.buffer = this.noiseBuffer(2.2);
@@ -244,6 +262,15 @@
       for (let j = 0; j < ids.length; j++) if (!alive[ids[j]]) this.removeGhostVoice(ids[j]);
 
       const dt = Math.max(0, Number(dtMs) || 0) / 1000;
+      const danger=state.mode==='play'&&state.remainingMs<=10000;
+      const pitchRatio=danger?Math.pow(2,-1/12):1;
+      for(let d=0;d<this.droneOscillators.length;d++){
+        this.droneOscillators[d].osc.frequency.setTargetAtTime(this.droneOscillators[d].base*pitchRatio,this.context.currentTime,.22);
+      }
+      const atmosphereTime=(state.animationMs||0)/1000;
+      const gustStrength=Math.pow(Math.max(0,Math.sin(atmosphereTime*.27-1.1)),14);
+      if(gustStrength>.58&&!this.gustActive){this.gustActive=true;this.windGust();}
+      else if(gustStrength<.18)this.gustActive=false;
       if(state.crawlerAttack&&state.crawlerAttack.phase==='silence')return;
       this.clickTimer -= dt;
       if (this.clickTimer <= 0 && state.mode === 'play') {
@@ -254,6 +281,17 @@
       if (state.focus.ghostId != null && this.heartbeatTimer <= 0) {
         this.heartbeat(state.focus.progress);
         this.heartbeatTimer = .7 - state.focus.progress * .32;
+      }
+      this.dangerHeartbeatTimer-=dt;
+      if(danger&&this.dangerHeartbeatTimer<=0){
+        const urgency=clamp(1-state.remainingMs/10000,0,1);
+        this.heartbeat(.85+urgency*.15);
+        this.dangerHeartbeatTimer=.5-urgency*.22;
+      }
+      this.percussionTimer-=dt;
+      if(state.combo>=3&&state.mode==='play'&&this.percussionTimer<=0){
+        this.percussion(state.combo);
+        this.percussionTimer=Math.max(.22,.48-(state.combo-3)*.035);
       }
       this.creakTimer -= dt;
       if (this.creakTimer <= 0 && state.mode === 'play') {
@@ -333,6 +371,19 @@
     this.tone(115, .055, .12, 'square', this.master, this.context.currentTime);
     this.tone(82, .08, .09, 'square', this.master, this.context.currentTime + .075);
   };
+  GhostLensAudio.prototype.perfectShutter = function () {
+    if(!this.context)return;
+    const now=this.context.currentTime;
+    this.noiseBurst(.055,.16,2100);
+    this.tone(1680,.11,.085,'triangle',this.master,now);
+    this.tone(2380,.18,.055,'sine',this.master,now+.025);
+    if(this.reverb){
+      this.tone(1680,.24,.07,'triangle',this.reverb,now);
+      this.tone(2380,.34,.045,'sine',this.reverb,now+.025);
+      this.tone(3160,.42,.025,'sine',this.reverb,now+.055);
+    }
+    this.tone(112,.06,.1,'square',this.master,now+.07);
+  };
   GhostLensAudio.prototype.blur = function () {
     if (!this.context) return;
     this.shutter();
@@ -349,6 +400,35 @@
     const ctx = this.context;
     const osc = this.tone(105 + Math.random() * 45, .75, .025, 'sawtooth');
     if (osc) osc.frequency.exponentialRampToValueAtTime(42, ctx.currentTime + .7);
+  };
+  GhostLensAudio.prototype.percussion = function (combo) {
+    if(!this.context)return;
+    const now=this.context.currentTime;
+    const strength=clamp(.045+(combo-3)*.008,.045,.085);
+    this.tone(58,.09,strength,'sine',this.ambientGain,now);
+    this.noiseBurst(.025,.018+strength*.2,3300);
+  };
+  GhostLensAudio.prototype.windGust = function () {
+    if(!this.context)return;
+    const ctx=this.context;
+    const src=ctx.createBufferSource();
+    const filter=ctx.createBiquadFilter();
+    const gain=ctx.createGain();
+    src.buffer=this.noiseBuffer(1.25);
+    filter.type='bandpass';filter.frequency.value=330;filter.Q.value=.55;
+    gain.gain.setValueAtTime(.0001,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.12,ctx.currentTime+.12);
+    gain.gain.exponentialRampToValueAtTime(.0001,ctx.currentTime+1.2);
+    src.connect(filter).connect(gain).connect(this.ambientGain);
+    src.start();src.stop(ctx.currentTime+1.25);
+  };
+  GhostLensAudio.prototype.clockChime = function () {
+    if(!this.context)return;
+    const now=this.context.currentTime;
+    [82.41,123.47,164.81].forEach(function(f,i){
+      this.tone(f,2.4,.13/(i+1),'sine',this.master,now+i*.012);
+      if(this.reverb)this.tone(f,2.7,.09/(i+1),'sine',this.reverb,now+i*.012);
+    },this);
   };
   GhostLensAudio.prototype.footstep = function (strength, destination) {
     if(!this.context)return;
@@ -425,12 +505,13 @@
     if (!this.unlocked) return;
     try {
       if (type === 'focusLock') this.focusLock();
-      else if (type === 'capture') { this.shutter(); this.banish(data.type); }
+      else if (type === 'capture') { if(data.quality==='PERFECT')this.perfectShutter();else this.shutter(); this.banish(data.type); }
       else if (type === 'blur') this.blur();
       else if (type === 'reloadStart') this.reload();
       else if (type === 'crawlerAttack') this.attack();
       else if (type === 'crawlerAttackPhase') this.setAttackPhase(data.phase);
       else if (type === 'jumpscare') this.jumpscareString();
+      else if (type === 'clockChime') this.clockChime();
       else if (type === 'reset' || type === 'start') this.setAttackPhase('idle');
     } catch (error) {
       console.error('[GHOST LENS audio event]', type, error);
@@ -450,6 +531,7 @@
     this.geiger(1);
     this.focusLock();
     this.shutter();
+    this.perfectShutter();
     this.reload();
     this.banish('drifter');
     this.banish('crawler');
@@ -459,6 +541,9 @@
     this.reverseLullaby();
     this.glassTap();
     this.footstep(1);
+    this.percussion(5);
+    this.windGust();
+    this.clockChime();
     this.jumpscareString();
     return true;
   };

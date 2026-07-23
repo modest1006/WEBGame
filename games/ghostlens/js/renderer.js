@@ -41,6 +41,8 @@
     this.effects = [];
     this.mirrorCrackTimer = 0;
     this.time = 0;
+    this.resultRunId = 0;
+    this.resultTimers = [];
     this.lastWidth = 0;
     this.lastHeight = 0;
 
@@ -62,7 +64,10 @@
       interference:document.getElementById('interference'),
       attackHands:document.getElementById('attack-hands'),
       jumpscare:document.getElementById('jumpscare-face'),
+      lightning:document.getElementById('lightning-flash'),
       flash:document.getElementById('flash'),
+      perfectStamp:document.getElementById('perfect-stamp'),
+      scorePopLayer:document.getElementById('score-pop-layer'),
       message:document.getElementById('message'),
       polaroid:document.getElementById('polaroid-tray'),
       result:document.getElementById('result-screen'),
@@ -71,6 +76,10 @@
       resultCaptures:document.getElementById('result-captures'),
       resultCombo:document.getElementById('result-combo'),
       resultBest:document.getElementById('result-best'),
+      newRecord:document.getElementById('new-record-stamp'),
+      lightbox:document.getElementById('photo-lightbox'),
+      lightboxImage:document.getElementById('photo-lightbox-image'),
+      lightboxCaption:document.getElementById('photo-lightbox-caption'),
       zoom:document.getElementById('zoom-btn')
     };
     this.makeRoom();
@@ -79,6 +88,7 @@
     this.resize();
     const self = this;
     window.addEventListener('resize', function () { self.resize(); });
+    this.dom.lightbox.addEventListener('click', function () { self.closePhoto(); });
   }
 
   GhostLensRenderer.prototype.material = function (color, roughness, metalness) {
@@ -193,6 +203,19 @@
       log.position.set((i-1.5)*.3,-1.2,-.72);
       group.add(log);
     }
+    this.emberLight = new THREE.PointLight(0xff7130,.48,5.6,2);
+    this.emberLight.position.set(0,-.86,-1);
+    group.add(this.emberLight);
+    this.embers = new THREE.Group();
+    for (let j=0;j<9;j++) {
+      const ember=new THREE.Mesh(
+        new THREE.SphereGeometry(.035+(j%3)*.012,5,4),
+        new THREE.MeshBasicMaterial({color:j%2?0xff6b27:0xffb04a,transparent:true,opacity:.72})
+      );
+      ember.position.set((j-4)*.14,-1.15+(j%2)*.045,-.82+(j%3)*.05);
+      this.embers.add(ember);
+    }
+    group.add(this.embers);
   };
 
   GhostLensRenderer.prototype.makeWindow = function () {
@@ -272,10 +295,33 @@
     portrait.rotation.y = Math.PI/2;
     const face = new THREE.Mesh(new THREE.PlaneGeometry(1.7,2.25),new THREE.MeshBasicMaterial({color:0x252a26}));
     face.position.set(-7.73,.85,2.9); face.rotation.y = Math.PI/2; this.roomGroup.add(face);
+
+    const clock=this.clockGroup=new THREE.Group();
+    clock.position.set(7.78,-.15,-2.3);
+    clock.rotation.y=-Math.PI/2;
+    this.roomGroup.add(clock);
+    this.box('grandfather clock',1.12,4.25,.72,0,0,0,0x241914,clock);
+    const clockFace=new THREE.Mesh(new THREE.CircleGeometry(.43,18),new THREE.MeshStandardMaterial({color:0x8d856e,roughness:.7,metalness:.15}));
+    clockFace.position.set(0,1.38,.38);
+    clock.add(clockFace);
+    const handMat=new THREE.LineBasicMaterial({color:0x171815});
+    const hands=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0,1.38,.405),new THREE.Vector3(0,1.7,.405),
+      new THREE.Vector3(0,1.38,.407),new THREE.Vector3(.25,1.28,.407)
+    ]),handMat);
+    clock.add(hands);
+    this.clockPendulum=new THREE.Group();
+    this.clockPendulum.position.set(0,-.48,.39);
+    const rod=new THREE.Mesh(new THREE.BoxGeometry(.035,1.15,.025),this.material(0x70634a,.35,.6));
+    rod.position.y=-.5;
+    const bob=new THREE.Mesh(new THREE.CircleGeometry(.2,14),this.material(0x76684c,.35,.65));
+    bob.position.set(0,-1.06,.01);
+    this.clockPendulum.add(rod,bob);
+    clock.add(this.clockPendulum);
   };
 
   GhostLensRenderer.prototype.makeLights = function () {
-    const moon = new THREE.DirectionalLight(0x9cc6d4,1.35);
+    const moon = this.moonLight = new THREE.DirectionalLight(0x9cc6d4,1.35);
     moon.position.set(-5,5,-6);
     moon.target.position.set(1,-1,2);
     moon.castShadow = true;
@@ -585,8 +631,8 @@
   GhostLensRenderer.prototype.render = function (state, dtMs) {
     if(!state)return;
     this.resize();
-    const dt=clamp((Number(dtMs)||0)/1000,0,.1);
-    this.time+=dt;
+    const dt=state.hitStop&&state.hitStop.active?0:clamp((Number(dtMs)||0)/1000,0,.1);
+    this.time=state.animationMs==null?this.time+dt:state.animationMs/1000;
     this.camera.fov=state.camera.zoom?40:70;
     this.camera.aspect=this.lastWidth/this.lastHeight;
     this.camera.rotation.x=state.camera.pitch*DEG;
@@ -606,7 +652,19 @@
     }
     if(this.dust){this.dust.rotation.y+=dt*.012;this.dust.position.y=Math.sin(this.time*.22)*.08;}
     if(this.chandelier){this.chandelier.rotation.z=Math.sin(this.time*.55)*.018;this.chandelier.rotation.x=Math.cos(this.time*.43)*.012;}
-    if(this.curtains)for(let i=0;i<this.curtains.length;i++)this.curtains[i].mesh.rotation.y=(i?-.12:.12)+Math.sin(this.time*.72+this.curtains[i].phase)*.035;
+    const gust=Math.pow(Math.max(0,Math.sin(this.time*.27-1.1)),14);
+    if(this.curtains)for(let i=0;i<this.curtains.length;i++){
+      this.curtains[i].mesh.rotation.y=(i?-.12:.12)+Math.sin(this.time*.72+this.curtains[i].phase)*.035+(i?1:-1)*gust*.34;
+      this.curtains[i].mesh.position.x=this.curtains[i].base+Math.sin(this.time*5.5+i)*gust*.18;
+    }
+    if(this.emberLight){
+      const emberFlicker=.42+Math.sin(this.time*8.7)*.12+Math.sin(this.time*14.3+.8)*.08;
+      this.emberLight.intensity=emberFlicker;
+      this.embers.rotation.z=Math.sin(this.time*3.2)*.025;
+      for(let e=0;e<this.embers.children.length;e++)this.embers.children[e].material.opacity=.48+.28*Math.abs(Math.sin(this.time*(4.2+e*.17)+e));
+    }
+    if(this.moonLight)this.moonLight.intensity=1.08+Math.sin(this.time*.11)*.2+Math.sin(this.time*.037+1.2)*.1;
+    if(this.clockPendulum)this.clockPendulum.rotation.z=Math.sin(this.time*1.45)*.23;
     this.updateHUD(state);
     this.renderer.render(this.scene,this.camera);
   };
@@ -623,8 +681,13 @@
     const focusGhost=state.ghosts.find(function(g){return g.id===state.focus.ghostId;});
     this.dom.reticle.classList.toggle('gold',!!focusGhost&&focusGhost.type==='gold');
     this.dom.focusLabel.textContent=state.focus.locked?'FOCUS LOCK':state.focus.ghostId!=null?'FOCUSING '+Math.round(state.focus.progress*100)+'%':'SEARCH';
-    this.dom.emf.parentElement.style.setProperty('--emf',state.emf);
+    const danger=state.remainingMs<=10000&&state.mode==='play';
+    const emfValue=danger?clamp(state.emf*.25+Math.abs(Math.sin(this.time*18.7))*1.02,0,1):state.emf;
+    this.dom.emf.parentElement.style.setProperty('--emf',emfValue.toFixed(3));
     this.dom.shell.classList.toggle('danger',state.remainingMs<=10000&&state.mode==='play');
+    this.dom.shell.classList.toggle('combo-hot',state.combo>=3&&state.mode==='play');
+    this.dom.shell.classList.toggle('hitstop',!!(state.hitStop&&state.hitStop.active));
+    this.dom.shell.classList.toggle('perfect-freeze',!!(state.hitStop&&state.hitStop.perfect));
     const attackPhase=state.crawlerAttack?state.crawlerAttack.phase:'idle';
     this.dom.interference.classList.toggle('active',attackPhase==='noise');
     this.dom.interference.classList.toggle('silence',attackPhase==='silence');
@@ -663,6 +726,44 @@
     el.className='flash';void el.offsetWidth;el.classList.add(blur?'blur':'fire');
   };
 
+  GhostLensRenderer.prototype.triggerLightning = function () {
+    const shell=this.dom.shell;
+    shell.classList.remove('lightning');
+    void shell.offsetWidth;
+    shell.classList.add('lightning');
+    setTimeout(function(){shell.classList.remove('lightning');},360);
+  };
+
+  GhostLensRenderer.prototype.showPerfectStamp = function () {
+    const stamp=this.dom.perfectStamp;
+    stamp.className='perfect-stamp';
+    void stamp.offsetWidth;
+    stamp.classList.add('slam');
+  };
+
+  GhostLensRenderer.prototype.captureScreenPoint = function (ghostId) {
+    const mesh=this.ghostMeshes[ghostId];
+    if(!mesh)return{x:50,y:50};
+    const point=mesh.position.clone().project(this.camera);
+    return{
+      x:clamp((point.x*.5+.5)*100,8,92),
+      y:clamp((.5-point.y*.5)*100,12,82)
+    };
+  };
+
+  GhostLensRenderer.prototype.showScorePop = function (data) {
+    const point=this.captureScreenPoint(data.ghostId);
+    const pop=document.createElement('div');
+    pop.className='score-pop'+(data.type==='gold'||data.type==='mirror'?' rare':'');
+    pop.style.setProperty('--pop-x',point.x.toFixed(2)+'%');
+    pop.style.setProperty('--pop-y',point.y.toFixed(2)+'%');
+    pop.innerHTML='+'+data.score+'<small>COMBO '+data.combo+' ×'+Number(data.comboMultiplier).toFixed(2)+'</small>';
+    this.dom.scorePopLayer.appendChild(pop);
+    const remove=function(){if(pop.parentNode)pop.parentNode.removeChild(pop);};
+    pop.addEventListener('animationend',remove,{once:true});
+    setTimeout(remove,1300);
+  };
+
   GhostLensRenderer.prototype.capturePhoto = function (photoId, data) {
     this.render(this.game.getState(),0);
     const source=this.renderer.domElement;
@@ -685,6 +786,21 @@
     ctx.textAlign='right';
     ctx.fillStyle=data.type==='gold'?'#f8d66b':'rgba(217,237,226,.88)';
     ctx.fillText(data.quality+'  #'+String(photoId).padStart(2,'0'),width-12,height-14);
+    if(data.quality==='PERFECT'){
+      ctx.save();
+      ctx.translate(width*.5,height*.43);
+      ctx.rotate(-12*DEG);
+      ctx.globalAlpha=.78;
+      ctx.strokeStyle='#a4161c';
+      ctx.lineWidth=Math.max(3,width*.009);
+      ctx.font='900 '+Math.max(28,Math.round(width*.105))+'px monospace';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      const stampWidth=ctx.measureText('PERFECT').width;
+      ctx.strokeRect(-stampWidth*.56,-width*.07,stampWidth*1.12,width*.14);
+      ctx.strokeText('PERFECT',0,0);
+      ctx.restore();
+    }
     ctx.textAlign='left';
     let url=null;
     try{url=photoCanvas.toDataURL('image/jpeg',.74);}catch(error){console.error('[GHOST LENS photo]',error);}
@@ -707,21 +823,73 @@
   };
 
   GhostLensRenderer.prototype.showResult = function (state) {
-    this.dom.resultScore.textContent=String(state.score);
+    this.resultRunId++;
+    const runId=this.resultRunId;
+    for(let t=0;t<this.resultTimers.length;t++)clearTimeout(this.resultTimers[t]);
+    this.resultTimers=[];
+    this.closePhoto();
+    this.dom.resultScore.textContent='0';
+    this.dom.resultScore.dataset.target=String(state.score);
     this.dom.resultCaptures.textContent=String(state.captures);
     this.dom.resultCombo.textContent=String(state.maxCombo);
     this.dom.resultBest.textContent=String(state.bestScore);
+    this.dom.newRecord.classList.toggle('active',!!state.newRecord);
     this.dom.album.innerHTML='';
     for(let i=0;i<state.photos.length;i++){
       const p=state.photos[i];
       const figure=document.createElement('figure');
-      figure.style.setProperty('--tilt',((i%5)-2)*1.2+'deg');
+      const tilt=(((p.id*37)%19)-9)*.72;
+      figure.style.setProperty('--tilt',tilt.toFixed(2)+'deg');
+      figure.style.setProperty('--delay',(i*150)+'ms');
+      figure.tabIndex=0;
       if(p.dataUrl){const img=document.createElement('img');img.src=p.dataUrl;img.alt=p.quality+' '+p.type+'の心霊写真';figure.appendChild(img);}
       const caption=document.createElement('figcaption');
       caption.textContent=p.quality+' / '+p.type.toUpperCase()+' / +'+p.score;
-      figure.appendChild(caption);this.dom.album.appendChild(figure);
+      figure.appendChild(caption);
+      const self=this;
+      const toggle=function(){
+        const opening=!figure.classList.contains('expanded');
+        self.closePhoto();
+        if(opening){
+          figure.classList.add('expanded');
+          const image=figure.querySelector('img');
+          if(image){
+            self.dom.lightboxImage.src=image.src;
+            self.dom.lightboxImage.alt=image.alt;
+            self.dom.lightboxCaption.textContent=caption.textContent;
+            self.dom.lightbox.classList.add('open');
+          }
+        }
+      };
+      figure.addEventListener('click',toggle);
+      figure.addEventListener('keydown',function(event){if(event.key==='Enter'||event.key===' '){event.preventDefault();toggle();}});
+      this.dom.album.appendChild(figure);
     }
+    this.dom.album.classList.remove('revealing');
+    void this.dom.album.offsetWidth;
+    this.dom.album.classList.add('revealing');
     this.dom.result.classList.remove('hidden');
+    const countDelay=state.photos.length*150+520;
+    this.resultTimers.push(setTimeout(function(){
+      const started=performance.now();
+      const duration=900;
+      function count(now){
+        if(runId!==this.resultRunId)return;
+        const progress=clamp((now-started)/duration,0,1);
+        const eased=1-Math.pow(1-progress,3);
+        this.dom.resultScore.textContent=String(Math.round(state.score*eased));
+        if(progress<1)requestAnimationFrame(count.bind(this));
+      }
+      requestAnimationFrame(count.bind(this));
+    }.bind(this),countDelay));
+  };
+
+  GhostLensRenderer.prototype.closePhoto = function () {
+    if(!this.dom||!this.dom.lightbox)return;
+    this.dom.lightbox.classList.remove('open');
+    this.dom.lightboxImage.removeAttribute('src');
+    const expanded=this.dom.album?this.dom.album.querySelectorAll('figure.expanded'):[];
+    for(let i=0;i<expanded.length;i++)expanded[i].classList.remove('expanded');
   };
 
   GhostLensRenderer.prototype.handleEvent = function (type, data) {
@@ -730,8 +898,9 @@
       this.dom.shell.classList.add('shaking');
       setTimeout(function(){document.getElementById('game-shell').classList.remove('shaking');},260);
       this.spawnBanishEffect(data.type,data.ghostId);
-      const suffix='  +'+data.score;
-      this.showMessage(data.quality+suffix,data.type==='gold'?'gold':data.quality.toLowerCase());
+      this.showScorePop(data);
+      if(data.quality==='PERFECT')this.showPerfectStamp();
+      else this.showMessage(data.quality,data.type==='gold'?'gold':data.quality.toLowerCase());
       this.capturePhoto(data.photoId,data);
     }else if(type==='blur'){
       this.flash(true);this.showMessage('OUT OF FOCUS','');
@@ -744,9 +913,15 @@
       setTimeout(function(){document.getElementById('game-shell').classList.remove('shaking');},900);
     }else if(type==='jumpscare'){
       this.dom.shell.classList.add('shaking');
+      this.triggerLightning();
       setTimeout(function(){document.getElementById('game-shell').classList.remove('shaking');},420);
+    }else if(type==='clockChime'){
+      this.showMessage('XII','');
     }else if(type==='expired'){
       this.showMessage(data.type==='gold'?'RARE SIGNAL LOST':'SIGNAL LOST','');
+    }else if(type==='reset'||type==='start'){
+      this.closePhoto();
+      this.dom.newRecord.classList.remove('active');
     }
     if(type==='capture'&&data.type==='mirror'){
       this.mirrorCrackTimer=2.1;
@@ -765,7 +940,10 @@
       far:this.camera.far,
       fogDensity:this.scene.fog.density,
       ghostMeshes:Object.keys(this.ghostMeshes).length,
-      effects:this.effects.length
+      effects:this.effects.length,
+      animationTimeMs:Math.round(this.time*1000),
+      albumItems:this.dom.album.children.length,
+      lightboxOpen:this.dom.lightbox.classList.contains('open')
     };
   };
 

@@ -256,6 +256,136 @@ h1 span { color:#e1e5dc; }
   .shutter-btn { opacity:.6; }
 }
 
+.game-shell.hitstop #world,
+.game-shell.hitstop .noise-field,
+.game-shell.hitstop .breath-fog,
+.game-shell.hitstop .scanlines,
+.game-shell.hitstop .recording i,
+.game-shell.hitstop .danger-vignette,
+.game-shell.hitstop .focus-ring,
+.game-shell.hitstop .viewfinder-corner::before,
+.game-shell.hitstop .viewfinder-corner::after,
+.game-shell.hitstop .score-pop,
+.game-shell.hitstop .polaroid-tray {
+  animation-play-state:paused !important;
+}
+.game-shell.perfect-freeze #world {
+  filter:grayscale(1) contrast(1.18) brightness(.88);
+}
+
+.lightning-flash {
+  position:absolute; inset:0; z-index:14; pointer-events:none; opacity:0;
+  background:rgba(205,229,255,.82); mix-blend-mode:screen;
+}
+.game-shell.lightning .lightning-flash { animation:lightning-strike .34s steps(1); }
+@keyframes lightning-strike {
+  0%,100%{opacity:0} 8%{opacity:.88} 14%{opacity:.08} 21%{opacity:.68} 32%{opacity:0}
+}
+
+.perfect-stamp {
+  position:absolute; z-index:19; left:50%; top:42%; pointer-events:none;
+  padding:.06em .22em; border:.12em double #a81419; color:#b51b21;
+  font:900 clamp(42px,13vw,112px)/1 "Courier New",monospace;
+  letter-spacing:-.08em; opacity:0; transform:translate(-50%,-50%) rotate(-12deg) scale(2.2);
+  text-shadow:0 2px rgba(255,255,255,.2); mix-blend-mode:screen;
+}
+.perfect-stamp.slam { animation:perfect-slam .78s cubic-bezier(.1,.85,.18,1); }
+@keyframes perfect-slam {
+  0%{opacity:0;transform:translate(-50%,-50%) rotate(-12deg) scale(2.2)}
+  13%{opacity:1;transform:translate(-50%,-50%) rotate(-12deg) scale(.86)}
+  22%,72%{opacity:.95;transform:translate(-50%,-50%) rotate(-12deg) scale(1)}
+  100%{opacity:0;transform:translate(-50%,-62%) rotate(-10deg) scale(1.04)}
+}
+.score-pop-layer { position:absolute; inset:0; z-index:18; pointer-events:none; overflow:hidden; }
+.score-pop {
+  position:absolute; left:var(--pop-x,50%); top:var(--pop-y,50%);
+  color:#e2f3e9; font:900 clamp(20px,4vw,38px) "Courier New",monospace;
+  white-space:nowrap; text-shadow:0 2px 8px #000,0 0 12px rgba(191,244,217,.5);
+  transform:translate(-50%,-50%); animation:score-rise 1.1s ease-out forwards;
+}
+.score-pop small { display:block; margin-top:2px; font-size:.34em; letter-spacing:.12em; text-align:center; }
+.score-pop.rare { color:#ffe082; text-shadow:0 2px 8px #000,0 0 18px rgba(255,192,55,.9); }
+@keyframes score-rise {
+  0%{opacity:0;transform:translate(-50%,-10%) scale(.65)}
+  16%{opacity:1;transform:translate(-50%,-50%) scale(1.12)}
+  72%{opacity:1}
+  100%{opacity:0;transform:translate(-50%,-190%) scale(.92)}
+}
+
+.game-shell.combo-hot .viewfinder-corner::before,
+.game-shell.combo-hot .viewfinder-corner::after {
+  background:#e04b43; box-shadow:0 0 5px #ff3028,0 0 18px rgba(255,42,34,.85);
+  animation:combo-bracket .48s ease-in-out infinite alternate;
+}
+@keyframes combo-bracket { to{filter:brightness(1.65);box-shadow:0 0 8px #ff6358,0 0 28px #d31f19} }
+
+.danger .danger-vignette {
+  box-shadow:inset 0 0 17vmin 6vmin rgba(180,0,0,.9);
+  animation:danger-pulse .46s ease-in-out infinite;
+}
+.danger .time-box { color:#ff8b80; text-shadow:0 0 14px #c30000; }
+
+.title-screen::after {
+  content:""; position:absolute; inset:0; pointer-events:none; opacity:0;
+  background:rgba(185,218,244,.72); mix-blend-mode:screen;
+  animation:title-lightning 10.7s steps(1) infinite;
+}
+@keyframes title-lightning {
+  0%,67%,69%,70.5%,72%,100%{opacity:0}
+  67.3%{opacity:.72} 68%{opacity:.08} 69.4%{opacity:.48} 71%{opacity:.14}
+}
+.title-content h1 { animation:logo-flicker 6.8s steps(1) infinite; }
+@keyframes logo-flicker {
+  0%,7%,9%,11%,63%,65%,100%{opacity:1;text-shadow:0 3px 30px #000}
+  8%,10%,64%{opacity:.48;text-shadow:28px 9px 10px #000}
+  64.5%{opacity:.08;text-shadow:-36px 12px 6px #000}
+}
+.title-dust {
+  position:absolute; inset:0; pointer-events:none; opacity:.36;
+  background:
+    radial-gradient(circle at 13% 72%,rgba(221,232,219,.7) 0 1px,transparent 2px),
+    radial-gradient(circle at 31% 18%,rgba(221,232,219,.55) 0 1px,transparent 2px),
+    radial-gradient(circle at 67% 81%,rgba(221,232,219,.62) 0 1px,transparent 2px),
+    radial-gradient(circle at 84% 34%,rgba(221,232,219,.5) 0 1px,transparent 2px);
+  background-size:143px 157px,181px 211px,227px 193px,269px 241px;
+  animation:title-dust-float 13s linear infinite;
+}
+@keyframes title-dust-float { to{transform:translate(2.5%,-8%);background-position:19px -47px,-23px -61px,31px -83px,-17px -101px} }
+
+.album figure {
+  cursor:zoom-in; opacity:0; transform:translateY(-90px) rotate(var(--tilt,-2deg)) scale(1.08);
+}
+.album.revealing figure {
+  animation:photo-drop .52s cubic-bezier(.18,.8,.28,1.18) forwards;
+  animation-delay:var(--delay,0ms);
+}
+@keyframes photo-drop {
+  0%{opacity:0;transform:translateY(-90px) rotate(0deg) scale(1.08)}
+  70%{opacity:1;transform:translateY(6px) rotate(var(--tilt)) scale(.98)}
+  100%{opacity:1;transform:translateY(0) rotate(var(--tilt)) scale(1)}
+}
+.new-record-stamp {
+  width:max-content; margin:-12px auto 18px; padding:3px 10px;
+  border:4px double #a51e20; color:#a51e20; opacity:0;
+  font:900 clamp(18px,4vw,30px) "Courier New",monospace;
+  letter-spacing:.06em; transform:rotate(-7deg) scale(1.8);
+}
+.new-record-stamp.active { animation:record-stamp .72s .18s cubic-bezier(.1,.88,.22,1) forwards; }
+@keyframes record-stamp { 35%,100%{opacity:.9;transform:rotate(-7deg) scale(1)} }
+
+.photo-lightbox {
+  position:absolute; inset:0; z-index:35; display:none; place-items:center;
+  padding:6vmin; background:rgba(3,5,4,.9); cursor:zoom-out;
+}
+.photo-lightbox.open { display:grid; }
+.photo-lightbox img {
+  max-width:min(88vw,900px); max-height:78vh; padding:12px 12px 42px;
+  background:#e8e2d2; box-shadow:0 16px 60px #000; object-fit:contain;
+  animation:lightbox-in .24s ease-out;
+}
+.photo-lightbox p { margin:-32px 0 0; z-index:1; color:#252d29; font:11px "Courier New",monospace; }
+@keyframes lightbox-in { from{opacity:0;transform:scale(.82) rotate(-2deg)} }
+
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after { animation-duration:.001ms !important; animation-iteration-count:1 !important; }
 }

@@ -6,6 +6,9 @@
   const MAX_FILM = 12;
   const RELOAD_MS = 2000;
   const RETICLE_DEG = 5.5;
+  const HIT_STOP_MS = 120;
+  const PERFECT_HIT_STOP_MS = 200;
+  const CLOCK_CHIME_MS = 45000;
   const DEG = Math.PI / 180;
   const CRAWLER_ATTACK_PHASES = { grab:700, noise:2600, silence:1700 };
   const MIRROR_WORLD = { x:5.78, y:.6, z:-4.58 };
@@ -84,6 +87,7 @@
   GhostLensGame.prototype.reset = function () {
     this.mode = 'ready';
     this.elapsedMs = 0;
+    this.animationMs = 0;
     this.timeMs = 90000;
     this.score = 0;
     this.successCount = 0;
@@ -112,6 +116,10 @@
     this.spawnCooldownMs = 0;
     this.lastQuality = null;
     this.countdownSecond = null;
+    this.hitStopMs = 0;
+    this.hitStopDurationMs = 0;
+    this.clockChimed = false;
+    this.newRecord = false;
     this.emit('reset', {});
   };
 
@@ -251,6 +259,12 @@
     dtMs = clamp(Number(dtMs) || 0, 0, 120000);
     let remaining = dtMs;
     while (remaining > .0001 && this.mode === 'play') {
+      if (this.hitStopMs > 0) {
+        const frozen = Math.min(remaining, this.hitStopMs);
+        this.hitStopMs = Math.max(0, this.hitStopMs - frozen);
+        remaining -= frozen;
+        continue;
+      }
       const slice = Math.min(FIXED_STEP, remaining);
       this.fixedStep(slice);
       remaining -= slice;
@@ -313,7 +327,13 @@
 
   GhostLensGame.prototype.fixedStep = function (dtMs) {
     this.elapsedMs += dtMs;
+    this.animationMs += dtMs;
     this.timeMs -= dtMs;
+    if (this.timeMs < .001) this.timeMs = 0;
+    if (!this.clockChimed && this.elapsedMs + .001 >= CLOCK_CHIME_MS) {
+      this.clockChimed = true;
+      this.emit('clockChime', { elapsedMs:Math.round(this.elapsedMs) });
+    }
     this.updateCrawlerAttack(dtMs);
     if (this.jumpscare.active) {
       this.jumpscare.remainingMs = Math.max(0, this.jumpscare.remainingMs - dtMs);
@@ -494,6 +514,8 @@
     this.timeMs += 3000;
     this.successCount++;
     this.lastQuality = quality;
+    this.hitStopDurationMs = quality === 'PERFECT' ? PERFECT_HIT_STOP_MS : HIT_STOP_MS;
+    this.hitStopMs = this.hitStopDurationMs;
     target.state = 'banishing';
     target.banishMs = target.type === 'gold' ? 950 : target.type === 'mirror' ? 1100 : target.type === 'doll' ? 900 : 680;
     target.visible = true;
@@ -531,7 +553,8 @@
       timeBonusMs:3000,
       film:this.film,
       photoId:photo.id,
-      errorDeg:Number(error.toFixed(3))
+      errorDeg:Number(error.toFixed(3)),
+      hitStopMs:this.hitStopDurationMs
     };
     this.emit('capture', payload);
     if (this.film === 0) this.beginReload();
@@ -576,13 +599,15 @@
   GhostLensGame.prototype.finish = function () {
     if (this.mode === 'result') return false;
     this.mode = 'result';
-    if (this.score > this.bestScore) this.bestScore = this.score;
+    this.newRecord = this.score > this.bestScore;
+    if (this.newRecord) this.bestScore = this.score;
     this.emit('finish', {
       score:this.score,
       captures:this.successCount,
       maxCombo:this.maxCombo,
       bestScore:this.bestScore,
-      photos:this.photos.length
+      photos:this.photos.length,
+      newRecord:this.newRecord
     });
     return true;
   };
@@ -625,6 +650,14 @@
       seed:this.seed,
       score:this.score,
       remainingMs:Math.max(0, Math.round(this.timeMs)),
+      animationMs:Math.round(this.animationMs),
+      hitStop:{
+        active:this.hitStopMs > 0,
+        remainingMs:Math.round(this.hitStopMs),
+        durationMs:Math.round(this.hitStopDurationMs),
+        perfect:this.lastQuality === 'PERFECT' && this.hitStopMs > 0
+      },
+      clockChimed:this.clockChimed,
       camera:{ yaw:Number(this.camera.yaw.toFixed(3)), pitch:Number(this.camera.pitch.toFixed(3)), zoom:this.camera.zoom },
       ghosts:this.ghosts.map(this.copyGhost.bind(this)),
       focus:{ ghostId:this.focusGhostId, ms:Math.round(this.focusMs), progress:Number((this.focusMs / FOCUS_MS).toFixed(3)), locked:this.focusMs >= FOCUS_MS },
@@ -662,6 +695,7 @@
         };
       }),
       bestScore:this.bestScore,
+      newRecord:this.newRecord,
       lastQuality:this.lastQuality
     };
   };
@@ -672,7 +706,7 @@
       'GHOST LENS seed=' + state.seed + ' mode=' + state.mode,
       'camera yaw=' + state.camera.yaw.toFixed(1) + ' pitch=' + state.camera.pitch.toFixed(1) + (state.camera.zoom ? ' ZOOM' : ''),
       'score=' + state.score + ' time=' + (state.remainingMs / 1000).toFixed(2) + ' film=' + state.film + (state.reloading ? ' DEVELOPING ' + state.reloadRemainingMs + 'ms' : ''),
-      'combo=' + state.combo + ' x' + state.comboMultiplier + ' focus=' + state.focus.progress.toFixed(2) + ' attack=' + state.crawlerAttack.phase + ' interference=' + state.interferenceMs,
+      'combo=' + state.combo + ' x' + state.comboMultiplier + ' focus=' + state.focus.progress.toFixed(2) + ' hitstop=' + state.hitStop.remainingMs + 'ms attack=' + state.crawlerAttack.phase + ' interference=' + state.interferenceMs,
       'jumpscare=' + (state.jumpscare.enabled ? (state.jumpscare.fired ? (state.jumpscare.active ? 'ACTIVE' : 'spent') : (state.jumpscare.planned ? 'at ' + state.jumpscare.triggerAtRemainingMs : 'not planned')) : 'disabled'),
       'photos=' + state.photos.length + ' captures=' + state.captures + ' blurred=' + state.blurred
     ];
@@ -691,6 +725,9 @@
     MAX_FILM:MAX_FILM,
     RELOAD_MS:RELOAD_MS,
     RETICLE_DEG:RETICLE_DEG,
+    HIT_STOP_MS:HIT_STOP_MS,
+    PERFECT_HIT_STOP_MS:PERFECT_HIT_STOP_MS,
+    CLOCK_CHIME_MS:CLOCK_CHIME_MS,
     CRAWLER_ATTACK_PHASES:CRAWLER_ATTACK_PHASES
   };
   GhostLensGame.angleError = angleError;

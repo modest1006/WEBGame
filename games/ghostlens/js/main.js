@@ -32,7 +32,7 @@
     try{
       if(audio)audio.handleEvent(type,data);
       if(renderer)renderer.handleEvent(type,data);
-      if(type==='capture')slowMotionMs=300;
+      if(type==='capture')slowMotionMs=300+(data.hitStopMs||0);
       if(type==='finish'){
         try{localStorage.setItem('ghostlens-best',String(game.bestScore));}catch(error){}
         if(renderer)renderer.showResult(game.getState());
@@ -146,8 +146,8 @@
       lastTime=now;
       const pose=input.update(dt);
       if(game.mode==='play'){
-        game.setCamera(pose.yaw,pose.pitch);
-        const logicDt=slowMotionMs>0?dt*.18:dt;
+        if(game.hitStopMs<=0)game.setCamera(pose.yaw,pose.pitch);
+        const logicDt=game.hitStopMs>0?dt:(slowMotionMs>0?dt*.18:dt);
         game.update(logicDt);
         if(slowMotionMs>0)slowMotionMs=Math.max(0,slowMotionMs-dt);
       }
