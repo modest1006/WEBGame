@@ -13,6 +13,9 @@
     this.clickTimer = 0;
     this.heartbeatTimer = 0;
     this.creakTimer = 3;
+    this.crawlerStepTimer = 0;
+    this.dollLullabyTimer = 1.8;
+    this.mirrorTapTimer = 1.1;
   }
 
   GhostLensAudio.prototype.unlock = function () {
@@ -108,8 +111,8 @@
     const filter = ctx.createBiquadFilter();
     gain.gain.value = 0;
     filter.type = 'bandpass';
-    filter.frequency.value = ghost.type === 'crawler' ? 115 : ghost.type === 'gold' ? 1300 : 560;
-    filter.Q.value = ghost.type === 'gold' ? 4 : 1.2;
+    filter.frequency.value = ghost.type === 'crawler' ? 115 : ghost.type === 'mirror' ? 2100 : ghost.type === 'gold' ? 1300 : ghost.type === 'doll' ? 720 : 560;
+    filter.Q.value = ghost.type === 'gold' || ghost.type === 'mirror' ? 4 : 1.2;
     filter.connect(gain).connect(panner).connect(this.presenceGain);
     const sources = [];
     if (ghost.type === 'drifter') {
@@ -132,6 +135,20 @@
       mod.connect(modGain).connect(growl.frequency);
       growl.connect(filter); growl.start(); mod.start();
       sources.push(growl, mod);
+    } else if (ghost.type === 'doll') {
+      [392,523.25].forEach(function (frequency, index) {
+        const tone=ctx.createOscillator();
+        const tg=ctx.createGain();
+        tone.type=index?'sine':'triangle';
+        tone.frequency.value=frequency;
+        tg.gain.value=index?.035:.045;
+        tone.connect(tg).connect(filter);tone.start();sources.push(tone);
+      });
+    } else if (ghost.type === 'mirror') {
+      const glass=ctx.createOscillator();
+      const glassGain=ctx.createGain();
+      glass.type='sine';glass.frequency.value=1760;glassGain.gain.value=.025;
+      glass.connect(glassGain).connect(filter);glass.start();sources.push(glass);
     } else {
       [523.25,659.25,783.99].forEach(function (frequency, index) {
         const tone = ctx.createOscillator();
@@ -193,12 +210,18 @@
     try {
       this.setListener(state.camera.yaw, state.camera.pitch);
       const alive = {};
+      let nearestCrawler = null;
+      let dollPresent = false;
+      let mirrorPresent = false;
       for (let i = 0; i < state.ghosts.length; i++) {
         const ghost = state.ghosts[i];
         alive[ghost.id] = true;
         this.ensureGhostVoice(ghost);
         const voice = this.voices[ghost.id];
         if (!voice) continue;
+        if(ghost.type==='crawler'&&(!nearestCrawler||ghost.distance<nearestCrawler.ghost.distance))nearestCrawler={ghost:ghost,voice:voice};
+        if(ghost.type==='doll')dollPresent=true;
+        if(ghost.type==='mirror')mirrorPresent=true;
         const yaw = ghost.yaw * Math.PI / 180;
         const pitch = ghost.pitch * Math.PI / 180;
         const radius = ghost.type === 'crawler' ? clamp(ghost.distance, 1, 10) : 6;
@@ -212,7 +235,8 @@
         const targetGain = (ghost.visible ? .22 : .08) * clarity * proximity;
         voice.gain.gain.setTargetAtTime(targetGain, this.context.currentTime, .08);
         voice.filter.frequency.setTargetAtTime(
-          (ghost.type === 'crawler' ? 100 : ghost.type === 'gold' ? 1550 : 460) + clarity * (ghost.type === 'crawler' ? 90 : 620),
+          (ghost.type === 'crawler' ? 100 : ghost.type === 'mirror' ? 1750 : ghost.type === 'gold' ? 1550 : ghost.type === 'doll' ? 510 : 460) +
+            clarity * (ghost.type === 'crawler' ? 90 : ghost.type === 'mirror' ? 850 : 620),
           this.context.currentTime, .08
         );
       }
@@ -220,6 +244,7 @@
       for (let j = 0; j < ids.length; j++) if (!alive[ids[j]]) this.removeGhostVoice(ids[j]);
 
       const dt = Math.max(0, Number(dtMs) || 0) / 1000;
+      if(state.crawlerAttack&&state.crawlerAttack.phase==='silence')return;
       this.clickTimer -= dt;
       if (this.clickTimer <= 0 && state.mode === 'play') {
         this.geiger(.1 + state.emf * .9);
@@ -234,6 +259,22 @@
       if (this.creakTimer <= 0 && state.mode === 'play') {
         this.creak();
         this.creakTimer = 5 + Math.random() * 9;
+      }
+      this.crawlerStepTimer -= dt;
+      if(nearestCrawler&&nearestCrawler.ghost.observed&&this.crawlerStepTimer<=0){
+        const proximity=clamp(1-nearestCrawler.ghost.distance/10,0,1);
+        this.footstep(.3+proximity*.7,nearestCrawler.voice.panner);
+        this.crawlerStepTimer=.92-proximity*.7;
+      }
+      this.dollLullabyTimer -= dt;
+      if(dollPresent&&this.dollLullabyTimer<=0){
+        this.reverseLullaby();
+        this.dollLullabyTimer=3.6+Math.random()*2.2;
+      }
+      this.mirrorTapTimer -= dt;
+      if(mirrorPresent&&this.mirrorTapTimer<=0){
+        this.glassTap();
+        this.mirrorTapTimer=1.3+Math.random()*2.4;
       }
     } catch (error) {
       console.error('[GHOST LENS audio update]', error);
@@ -309,6 +350,26 @@
     const osc = this.tone(105 + Math.random() * 45, .75, .025, 'sawtooth');
     if (osc) osc.frequency.exponentialRampToValueAtTime(42, ctx.currentTime + .7);
   };
+  GhostLensAudio.prototype.footstep = function (strength, destination) {
+    if(!this.context)return;
+    const now=this.context.currentTime;
+    this.tone(52,.12,.045+strength*.07,'sine',destination||this.master,now);
+    this.tone(31,.18,.025+strength*.045,'triangle',destination||this.master,now+.025);
+    this.noiseBurst(.09,.025+strength*.035,120);
+  };
+  GhostLensAudio.prototype.reverseLullaby = function () {
+    if(!this.context)return;
+    const now=this.context.currentTime;
+    [659.25,587.33,493.88,392].forEach(function(f,i){
+      this.tone(f,.42,.025+i*.006,i%2?'sine':'triangle',this.ambientGain,now+i*.19);
+    },this);
+  };
+  GhostLensAudio.prototype.glassTap = function () {
+    if(!this.context)return;
+    const now=this.context.currentTime;
+    this.tone(1870,.13,.05,'sine',this.master,now);
+    this.tone(2430,.09,.032,'sine',this.master,now+.055);
+  };
   GhostLensAudio.prototype.banish = function (type) {
     if (!this.context) return;
     const now = this.context.currentTime;
@@ -319,6 +380,12 @@
       this.noiseBurst(.65, .1, 160);
       const sink = this.tone(130, .65, .08, 'sawtooth');
       if (sink) sink.frequency.exponentialRampToValueAtTime(28, now + .62);
+    } else if(type === 'doll') {
+      this.tone(910,.08,.065,'square',this.master,now);
+      this.tone(220,.42,.055,'triangle',this.master,now+.08);
+    } else if(type === 'mirror') {
+      for(let i=0;i<6;i++)this.tone(1450+i*210,.22+i*.025,.04,'sine',this.master,now+i*.025);
+      this.noiseBurst(.5,.07,2800);
     } else {
       this.noiseBurst(.5, .07, 1000);
       this.tone(440, .55, .055, 'sine');
@@ -331,6 +398,28 @@
     const tone = this.tone(78, 1.2, .13, 'sawtooth');
     if (tone) tone.frequency.exponentialRampToValueAtTime(31, this.context.currentTime + 1.1);
   };
+  GhostLensAudio.prototype.jumpscareString = function () {
+    if(!this.context)return;
+    const now=this.context.currentTime;
+    [1240,1318,1480].forEach(function(f,i){
+      const tone=this.tone(f,.38,.12-i*.018,'sawtooth',this.master,now+i*.008);
+      if(tone)tone.frequency.exponentialRampToValueAtTime(f*1.55,now+.34);
+    },this);
+    this.noiseBurst(.18,.13,3600);
+  };
+  GhostLensAudio.prototype.setAttackPhase = function (phase) {
+    if(!this.context)return;
+    const now=this.context.currentTime;
+    if(phase==='silence'){
+      this.ambientGain.gain.setTargetAtTime(0,now,.018);
+      this.presenceGain.gain.setTargetAtTime(0,now,.018);
+    }else if(phase==='idle'){
+      this.ambientGain.gain.setTargetAtTime(.17,now,.08);
+      this.presenceGain.gain.setTargetAtTime(.34,now,.08);
+    }else if(phase==='noise'){
+      this.noiseBurst(.8,.18,420);
+    }
+  };
 
   GhostLensAudio.prototype.handleEvent = function (type, data) {
     if (!this.unlocked) return;
@@ -340,6 +429,9 @@
       else if (type === 'blur') this.blur();
       else if (type === 'reloadStart') this.reload();
       else if (type === 'crawlerAttack') this.attack();
+      else if (type === 'crawlerAttackPhase') this.setAttackPhase(data.phase);
+      else if (type === 'jumpscare') this.jumpscareString();
+      else if (type === 'reset' || type === 'start') this.setAttackPhase('idle');
     } catch (error) {
       console.error('[GHOST LENS audio event]', type, error);
     }
@@ -361,7 +453,13 @@
     this.reload();
     this.banish('drifter');
     this.banish('crawler');
+    this.banish('doll');
+    this.banish('mirror');
     this.banish('gold');
+    this.reverseLullaby();
+    this.glassTap();
+    this.footstep(1);
+    this.jumpscareString();
     return true;
   };
 

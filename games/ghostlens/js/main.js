@@ -3,6 +3,7 @@
 
   const params=new URLSearchParams(window.location.search);
   const seed=Number(params.get('seed'))||73191;
+  const jumpscareEnabled=params.get('jumpscare')!=='0';
   let bestScore=0;
   try{bestScore=Number(localStorage.getItem('ghostlens-best'))||0;}catch(error){}
 
@@ -40,7 +41,7 @@
     }catch(error){console.error('[GHOST LENS event boundary]',type,error);}
   }
 
-  const game=new GhostLensGame({seed:seed,bestScore:bestScore,onEvent:eventBoundary});
+  const game=new GhostLensGame({seed:seed,bestScore:bestScore,jumpscareEnabled:jumpscareEnabled,onEvent:eventBoundary});
   audio=new GhostLensAudio();
   renderer=new GhostLensRenderer({canvas:canvas,game:game});
   input=new GhostLensInput({

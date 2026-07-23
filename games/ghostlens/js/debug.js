@@ -57,6 +57,7 @@
     setTime:function(sec){const rt=ensurePlay();rt.game.setTime(sec);return rt.game.getState().remainingMs;},
     reloadFilm:function(){return ensurePlay().game.reloadFilm();},
     setFilm:function(n){return ensurePlay().game.setFilm(n);},
+    triggerJumpscare:function(){return ensurePlay().game.triggerJumpscare();},
     restart:function(){
       const rt=runtime();
       rt.game.reset();

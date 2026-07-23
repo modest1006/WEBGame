@@ -7,6 +7,13 @@
   const RELOAD_MS = 2000;
   const RETICLE_DEG = 5.5;
   const DEG = Math.PI / 180;
+  const CRAWLER_ATTACK_PHASES = { grab:700, noise:2600, silence:1700 };
+  const MIRROR_WORLD = { x:5.78, y:.6, z:-4.58 };
+  const DOLL_ANCHORS = [
+    { name:'bed', x:-6.31, y:-.255, z:-3.25 },
+    { name:'vanity', x:5.8, y:-.21, z:-4.6 },
+    { name:'fireplace', x:0, y:1.74, z:7.05 }
+  ];
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
   function shortestDegrees(v) {
@@ -22,6 +29,13 @@
     const dot = Math.sin(ap) * Math.sin(bp) + Math.cos(ap) * Math.cos(bp) * Math.cos(ay - by);
     return Math.acos(clamp(dot, -1, 1)) / DEG;
   }
+  function anglesFromWorld(position) {
+    const horizontal = Math.sqrt(position.x * position.x + position.z * position.z);
+    return {
+      yaw:shortestDegrees(Math.atan2(position.x, -position.z) / DEG),
+      pitch:clamp(Math.atan2(position.y, horizontal) / DEG, -30, 45)
+    };
+  }
   function comboMultiplier(combo) {
     if (combo <= 1) return 1;
     if (combo === 2) return 1.2;
@@ -30,7 +44,11 @@
     return Math.min(3, 2 + (combo - 4) * .25);
   }
   function typeName(type) {
-    return type === 'crawler' ? '這い寄り' : type === 'gold' ? '金色の残光' : '浮遊霊';
+    if (type === 'crawler') return '這い寄り';
+    if (type === 'doll') return '囁き人形';
+    if (type === 'mirror') return '鏡の淑女';
+    if (type === 'gold') return '金色の残光';
+    return '浮遊霊';
   }
 
   function RNG(seed) {
@@ -51,6 +69,7 @@
     this.seed = Number(options.seed) || 73191;
     this.rng = new RNG(this.seed);
     this.bestScore = Number(options.bestScore) || 0;
+    this.jumpscareEnabled = options.jumpscareEnabled !== false;
     this.onEvent = options.onEvent || function () {};
     this.nextGhostId = 1;
     this.nextPhotoId = 1;
@@ -80,6 +99,15 @@
     this.focusGhostId = null;
     this.focusMs = 0;
     this.interferenceMs = 0;
+    this.crawlerAttack = { phase:'idle', phaseRemainingMs:0, totalRemainingMs:0, sourceId:null };
+    this.jumpscare = {
+      enabled:this.jumpscareEnabled,
+      planned:false,
+      fired:false,
+      active:false,
+      remainingMs:0,
+      triggerAtRemainingMs:0
+    };
     this.targetGhostCount = this.rng.int(1, 3);
     this.spawnCooldownMs = 0;
     this.lastQuality = null;
@@ -93,8 +121,14 @@
     this.mode = 'play';
     this.timeMs = 90000;
     this.targetGhostCount = this.rng.int(1, 3);
+    this.jumpscare.planned = this.jumpscare.enabled && this.rng.next() < .3;
+    this.jumpscare.triggerAtRemainingMs = Math.round(this.rng.range(30000, 60000));
     while (this.activeGhostCount() < this.targetGhostCount) this.spawnRandomGhost();
-    this.emit('start', { targetGhostCount:this.targetGhostCount });
+    this.emit('start', {
+      targetGhostCount:this.targetGhostCount,
+      jumpscarePlanned:this.jumpscare.planned,
+      jumpscareAtRemainingMs:this.jumpscare.triggerAtRemainingMs
+    });
     return true;
   };
 
@@ -108,19 +142,46 @@
 
   GhostLensGame.prototype.spawnRandomGhost = function () {
     const roll = this.rng.next();
-    const type = roll < .1 ? 'gold' : roll < .43 ? 'crawler' : 'drifter';
+    const type = roll < .4 ? 'drifter' : roll < .65 ? 'crawler' : roll < .85 ? 'doll' : roll < .95 ? 'mirror' : 'gold';
     return this.spawnGhost(type, this.rng.range(-180, 180), this.rng.range(-30, 45), true);
   };
 
   GhostLensGame.prototype.spawnGhost = function (type, yawDeg, pitchDeg, automatic) {
-    if (['drifter','crawler','gold'].indexOf(type) < 0) type = 'drifter';
+    if (['drifter','crawler','doll','mirror','gold'].indexOf(type) < 0) type = 'drifter';
     const lifetimeMs = type === 'gold' ? 3000 : this.rng.range(12000, 20000);
+    let anchor = null;
+    let world = null;
+    if (type === 'mirror') {
+      anchor = 'mirror';
+      world = { x:MIRROR_WORLD.x, y:MIRROR_WORLD.y, z:MIRROR_WORLD.z };
+    } else if (type === 'doll') {
+      let placement;
+      if (automatic) {
+        placement = DOLL_ANCHORS[this.rng.int(0, DOLL_ANCHORS.length - 1)];
+      } else {
+        const requestedYaw = shortestDegrees(Number(yawDeg) || 0);
+        const requestedPitch = clamp(Number(pitchDeg) || 0, -30, 45);
+        placement = DOLL_ANCHORS[0];
+        let nearestError = Infinity;
+        for (let i = 0; i < DOLL_ANCHORS.length; i++) {
+          const candidateAngles = anglesFromWorld(DOLL_ANCHORS[i]);
+          const candidateError = angleError(requestedYaw, requestedPitch, candidateAngles.yaw, candidateAngles.pitch);
+          if (candidateError < nearestError) {
+            nearestError = candidateError;
+            placement = DOLL_ANCHORS[i];
+          }
+        }
+      }
+      anchor = placement.name;
+      world = { x:placement.x, y:placement.y, z:placement.z };
+    }
+    const anchoredAngles = world ? anglesFromWorld(world) : null;
     const ghost = {
       id:this.nextGhostId++,
       type:type,
       name:typeName(type),
-      yaw:shortestDegrees(Number(yawDeg) || 0),
-      pitch:clamp(Number(pitchDeg) || 0, -30, 45),
+      yaw:anchoredAngles ? anchoredAngles.yaw : shortestDegrees(Number(yawDeg) || 0),
+      pitch:anchoredAngles ? anchoredAngles.pitch : clamp(Number(pitchDeg) || 0, -30, 45),
       ageMs:0,
       lifetimeMs:lifetimeMs,
       remainingMs:lifetimeMs,
@@ -132,7 +193,15 @@
       focusMs:0,
       banishMs:0,
       automatic:!!automatic,
-      phase:this.rng.range(0, Math.PI * 2)
+      phase:this.rng.range(0, Math.PI * 2),
+      anchor:anchor,
+      world:world,
+      originWorld:world ? { x:world.x, y:world.y, z:world.z } : null,
+      dollUnseenMs:0,
+      dollMoveCount:0,
+      dollHeadTurn:0,
+      jerkFrame:0,
+      headLift:0
     };
     this.ghosts.push(ghost);
     this.emit('spawn', this.copyGhost(ghost));
@@ -188,10 +257,74 @@
     }
   };
 
+  GhostLensGame.prototype.startCrawlerAttack = function (ghostId) {
+    this.crawlerAttack.phase = 'grab';
+    this.crawlerAttack.phaseRemainingMs = CRAWLER_ATTACK_PHASES.grab;
+    this.crawlerAttack.totalRemainingMs = CRAWLER_ATTACK_PHASES.grab + CRAWLER_ATTACK_PHASES.noise + CRAWLER_ATTACK_PHASES.silence;
+    this.crawlerAttack.sourceId = ghostId;
+    this.interferenceMs = this.crawlerAttack.totalRemainingMs;
+    this.emit('crawlerAttack', {
+      id:ghostId,
+      phase:'grab',
+      durationMs:this.crawlerAttack.totalRemainingMs
+    });
+  };
+
+  GhostLensGame.prototype.updateCrawlerAttack = function (dtMs) {
+    const attack = this.crawlerAttack;
+    if (attack.phase === 'idle') return;
+    let remaining = dtMs;
+    while (remaining > .0001 && attack.phase !== 'idle') {
+      const consumed = Math.min(remaining, attack.phaseRemainingMs);
+      attack.phaseRemainingMs -= consumed;
+      attack.totalRemainingMs = Math.max(0, attack.totalRemainingMs - consumed);
+      this.interferenceMs = attack.totalRemainingMs;
+      remaining -= consumed;
+      if (attack.phaseRemainingMs > .0001) break;
+      if (attack.phase === 'grab') {
+        attack.phase = 'noise';
+        attack.phaseRemainingMs = CRAWLER_ATTACK_PHASES.noise;
+      } else if (attack.phase === 'noise') {
+        attack.phase = 'silence';
+        attack.phaseRemainingMs = CRAWLER_ATTACK_PHASES.silence;
+      } else {
+        attack.phase = 'idle';
+        attack.phaseRemainingMs = 0;
+        attack.totalRemainingMs = 0;
+        attack.sourceId = null;
+        this.interferenceMs = 0;
+      }
+      this.emit('crawlerAttackPhase', {
+        phase:attack.phase,
+        phaseRemainingMs:attack.phaseRemainingMs,
+        totalRemainingMs:attack.totalRemainingMs
+      });
+    }
+  };
+
+  GhostLensGame.prototype.triggerJumpscare = function () {
+    if (!this.jumpscare.enabled || this.jumpscare.fired) return false;
+    this.jumpscare.fired = true;
+    this.jumpscare.active = true;
+    this.jumpscare.remainingMs = 400;
+    this.emit('jumpscare', { durationMs:400 });
+    return true;
+  };
+
   GhostLensGame.prototype.fixedStep = function (dtMs) {
     this.elapsedMs += dtMs;
     this.timeMs -= dtMs;
-    if (this.interferenceMs > 0) this.interferenceMs = Math.max(0, this.interferenceMs - dtMs);
+    this.updateCrawlerAttack(dtMs);
+    if (this.jumpscare.active) {
+      this.jumpscare.remainingMs = Math.max(0, this.jumpscare.remainingMs - dtMs);
+      if (this.jumpscare.remainingMs === 0) {
+        this.jumpscare.active = false;
+        this.emit('jumpscareEnd', {});
+      }
+    }
+    if (!this.jumpscare.fired && this.jumpscare.planned && this.timeMs <= this.jumpscare.triggerAtRemainingMs) {
+      this.triggerJumpscare();
+    }
 
     if (this.reloadMs > 0) {
       this.reloadMs = Math.max(0, this.reloadMs - dtMs);
@@ -233,18 +366,43 @@
       ghost.visible = error <= RETICLE_DEG * 1.4;
       if (ghost.visible) ghost.observed = true;
 
+      if (ghost.type === 'doll') {
+        if (error > 25) {
+          ghost.dollUnseenMs += dtMs;
+          while (ghost.dollUnseenMs >= 600) {
+            ghost.dollUnseenMs -= 600;
+            ghost.dollMoveCount++;
+            ghost.dollHeadTurn = clamp(ghost.dollHeadTurn + this.rng.range(-22, 22), -58, 58);
+            if (ghost.world) {
+              ghost.world.x = clamp(ghost.world.x + this.rng.range(-.08, .08), ghost.originWorld.x - .2, ghost.originWorld.x + .2);
+              ghost.world.z = clamp(ghost.world.z + this.rng.range(-.08, .08), ghost.originWorld.z - .2, ghost.originWorld.z + .2);
+              const movedAngles = anglesFromWorld(ghost.world);
+              ghost.yaw = movedAngles.yaw;
+              ghost.pitch = movedAngles.pitch;
+            } else {
+              ghost.yaw = shortestDegrees(ghost.yaw + this.rng.range(-1.4, 1.4));
+              ghost.pitch = clamp(ghost.pitch + this.rng.range(-.45, .45), -30, 45);
+            }
+          }
+        }
+      }
+
       if (ghost.type === 'crawler' && (ghost.observed || error < 34)) {
         ghost.observed = true;
         ghost.distance -= dtMs * .001;
+        const nextJerkFrame = Math.floor(ghost.ageMs / 400);
+        if (nextJerkFrame !== ghost.jerkFrame) {
+          ghost.jerkFrame = nextJerkFrame;
+          ghost.headLift = clamp(1 - (ghost.distance - .55) / (ghost.initialDistance - .55), 0, 1);
+        }
         if (ghost.distance <= .55) {
           ghost.distance = .55;
           ghost.state = 'gone';
-          this.interferenceMs = 5000;
           this.combo = 0;
           this.missedCount++;
           this.focusGhostId = null;
           this.focusMs = 0;
-          this.emit('crawlerAttack', { id:ghost.id, durationMs:5000 });
+          this.startCrawlerAttack(ghost.id);
           continue;
         }
       }
@@ -322,7 +480,7 @@
     if (error <= 2) { quality = 'PERFECT'; precisionMultiplier = 2; }
     else if (error <= 4) { quality = 'GOOD'; precisionMultiplier = 1.5; }
 
-    let base = target.type === 'gold' ? 500 : 100;
+    let base = target.type === 'gold' ? 500 : target.type === 'mirror' ? 400 : target.type === 'doll' ? 150 : 100;
     if (target.type === 'crawler') {
       const proximity = clamp(1 - (target.distance - .55) / (target.initialDistance - .55), 0, 1);
       base = Math.round(100 + proximity * 200);
@@ -337,7 +495,7 @@
     this.successCount++;
     this.lastQuality = quality;
     target.state = 'banishing';
-    target.banishMs = target.type === 'gold' ? 950 : 680;
+    target.banishMs = target.type === 'gold' ? 950 : target.type === 'mirror' ? 1100 : target.type === 'doll' ? 900 : 680;
     target.visible = true;
     target.focusMs = FOCUS_MS;
 
@@ -442,9 +600,20 @@
       state:ghost.state,
       distance:Number(ghost.distance.toFixed(3)),
       remainingMs:Math.max(0, Math.round(ghost.remainingMs)),
+      banishRemainingMs:Math.max(0, Math.round(ghost.banishMs)),
       lifetimeMs:Math.round(ghost.lifetimeMs),
       focusMs:ghost.id === this.focusGhostId ? Math.round(this.focusMs) : 0,
-      angleErrorDeg:Number(error.toFixed(3))
+      angleErrorDeg:Number(error.toFixed(3)),
+      anchor:ghost.anchor,
+      world:ghost.world ? {
+        x:Number(ghost.world.x.toFixed(3)),
+        y:Number(ghost.world.y.toFixed(3)),
+        z:Number(ghost.world.z.toFixed(3))
+      } : null,
+      dollMoveCount:ghost.dollMoveCount,
+      dollHeadTurn:Number(ghost.dollHeadTurn.toFixed(3)),
+      jerkFrame:ghost.jerkFrame,
+      headLift:Number(ghost.headLift.toFixed(3))
     };
   };
 
@@ -470,6 +639,20 @@
       blurred:this.blurCount,
       missed:this.missedCount,
       interferenceMs:Math.round(this.interferenceMs),
+      crawlerAttack:{
+        phase:this.crawlerAttack.phase,
+        phaseRemainingMs:Math.round(this.crawlerAttack.phaseRemainingMs),
+        totalRemainingMs:Math.round(this.crawlerAttack.totalRemainingMs),
+        sourceId:this.crawlerAttack.sourceId
+      },
+      jumpscare:{
+        enabled:this.jumpscare.enabled,
+        planned:this.jumpscare.planned,
+        fired:this.jumpscare.fired,
+        active:this.jumpscare.active,
+        remainingMs:Math.round(this.jumpscare.remainingMs),
+        triggerAtRemainingMs:Math.round(this.jumpscare.triggerAtRemainingMs)
+      },
       emf:Number(clamp(1 - nearestError / 180, 0, 1).toFixed(3)),
       photos:this.photos.map(function (p) {
         return {
@@ -489,7 +672,8 @@
       'GHOST LENS seed=' + state.seed + ' mode=' + state.mode,
       'camera yaw=' + state.camera.yaw.toFixed(1) + ' pitch=' + state.camera.pitch.toFixed(1) + (state.camera.zoom ? ' ZOOM' : ''),
       'score=' + state.score + ' time=' + (state.remainingMs / 1000).toFixed(2) + ' film=' + state.film + (state.reloading ? ' DEVELOPING ' + state.reloadRemainingMs + 'ms' : ''),
-      'combo=' + state.combo + ' x' + state.comboMultiplier + ' focus=' + state.focus.progress.toFixed(2) + ' interference=' + state.interferenceMs,
+      'combo=' + state.combo + ' x' + state.comboMultiplier + ' focus=' + state.focus.progress.toFixed(2) + ' attack=' + state.crawlerAttack.phase + ' interference=' + state.interferenceMs,
+      'jumpscare=' + (state.jumpscare.enabled ? (state.jumpscare.fired ? (state.jumpscare.active ? 'ACTIVE' : 'spent') : (state.jumpscare.planned ? 'at ' + state.jumpscare.triggerAtRemainingMs : 'not planned')) : 'disabled'),
       'photos=' + state.photos.length + ' captures=' + state.captures + ' blurred=' + state.blurred
     ];
     if (!state.ghosts.length) lines.push('ghosts: none');
@@ -506,7 +690,8 @@
     FOCUS_MS:FOCUS_MS,
     MAX_FILM:MAX_FILM,
     RELOAD_MS:RELOAD_MS,
-    RETICLE_DEG:RETICLE_DEG
+    RETICLE_DEG:RETICLE_DEG,
+    CRAWLER_ATTACK_PHASES:CRAWLER_ATTACK_PHASES
   };
   GhostLensGame.angleError = angleError;
   GhostLensGame.shortestDegrees = shortestDegrees;
