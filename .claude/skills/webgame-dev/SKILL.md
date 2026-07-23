@@ -80,6 +80,13 @@ games/<game-name>/
 - `touch-action: none` や `preventDefault` でスクロール/ダブルタップズームの誤爆を防ぐ
 - viewport メタタグ必須。モバイル縦画面レイアウトを `preview_resize`（mobile）で必ず確認する
 
+## ジャイロ操作（DeviceOrientation）
+
+- **スマホ縦持ち（beta≈60〜90°）はオイラー角Z-X-Yのジンバルロック帯。`beta/gamma のニュートラル差分`で入力を作ると、gammaが±180フリップ・過大値で振り切れ「曲がりが直角」「ピッチが効かない」になる**（PROPELLA実機で発生）。→ (alpha,beta,gamma)からZ-X-Y intrinsic順でクォータニオンを構築し、キャリブレーション姿勢との**相対回転**から軸を導出する: pitch=画面法線の仰角差分、turn=画面法線を水平面に射影した方位角差分（=鉛直軸まわりの「ひねり」。ユーザーが直感的なのはバンクでなくこのひねり）。方位角差は必ず±180正規化
+- 感度はデッドゾーン（2〜3°）＋フルスケール（25〜35°）＋**expoカーブ（sign(x)·x²）**で中央を繊細に。ローパス（`1-exp(-dt*8)`程度）でジッタ除去
+- iOS 13+は `DeviceOrientationEvent.requestPermission()` をユーザータップから呼ぶ許可フロー必須。HTTPSのみ動作（file://・PCにはキーボード/マウス/ドラッグのfallbackを必ず用意）
+- 検証は合成 `deviceorientation` イベント（`new Event`にalpha/beta/gammaを付与してdispatch）でキャリブレーション→入力変換をE2Eで通す。ジンバル帯（beta=85〜90）に±2°ノイズを入れて入力が暴れないことも確認
+
 ## Canvas 2D のパフォーマンス
 
 - **エンティティ単位の `shadowBlur` / radial gradient 描画は禁止**（数百個で桁違いに遅くなる。PETRIで100フレーム2分超の実例）。グローは「低解像度オフスクリーンに描く→拡大して `lighter` で1回合成」の定数コスト方式で
