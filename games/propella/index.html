@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#76c9ef">
+  <title>PROPELLA - 蒼空リングフライト</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+  <main id="game-shell" class="game-shell">
+    <canvas id="world" aria-label="PROPELLA 3D flight view"></canvas>
+    <canvas id="wind-layer" aria-hidden="true"></canvas>
+
+    <div id="sun-glow" class="sun-glow" aria-hidden="true"></div>
+    <div id="flash" class="flash" aria-hidden="true"></div>
+    <div id="vignette" class="vignette" aria-hidden="true"></div>
+
+    <header id="hud" class="hud" aria-label="Flight information">
+      <div class="score-block">
+        <span>SCORE</span>
+        <b id="score-value">000000</b>
+        <em id="combo-value">COMBO ×1</em>
+      </div>
+      <div id="time-box" class="time-box">
+        <span>TIME</span>
+        <b id="time-value">90.0</b>
+      </div>
+      <div class="hud-actions">
+        <button id="calibrate-btn" class="small-button" type="button" title="現在の端末姿勢をニュートラルに設定">◎ NEUTRAL</button>
+        <button id="mute-btn" class="small-button" type="button" aria-pressed="false">♪ SOUND</button>
+      </div>
+    </header>
+
+    <div id="target-marker" class="target-marker" aria-hidden="true">
+      <i></i><span id="target-distance">NEXT 000m</span>
+    </div>
+    <div id="callout" class="callout" aria-live="polite"></div>
+    <div id="orientation-note" class="orientation-note">縦向きに戻して<br>NEUTRALを再設定</div>
+
+    <section id="cockpit" class="cockpit" aria-label="Cockpit instruments">
+      <div class="windscreen-frame">
+        <i class="frame-left"></i><i class="frame-right"></i><i class="frame-top"></i>
+      </div>
+      <div class="propeller" aria-hidden="true">
+        <i class="prop-blur prop-a"></i><i class="prop-blur prop-b"></i>
+        <i class="prop-hub"></i>
+      </div>
+      <div class="dashboard">
+        <div class="instrument speedometer" aria-label="Airspeed">
+          <span class="instrument-title">KNOTS</span>
+          <div class="ticks"></div>
+          <i id="speed-needle" class="needle"></i>
+          <b id="speed-readout">060</b>
+        </div>
+        <div class="instrument attitude" aria-label="Artificial horizon">
+          <div id="attitude-world" class="attitude-world">
+            <div class="attitude-sky"></div>
+            <div class="attitude-ground"></div>
+            <i class="attitude-line"></i>
+          </div>
+          <i class="plane-mark">—<b>●</b>—</i>
+          <span class="instrument-title">ATTITUDE</span>
+        </div>
+        <div class="instrument altimeter" aria-label="Altitude">
+          <span class="instrument-title">ALT ×10</span>
+          <div class="ticks"></div>
+          <i id="alt-needle" class="needle"></i>
+          <b id="alt-readout">008</b>
+        </div>
+        <div class="plaque">
+          <b>PROPELLA</b>
+          <span>SKY ADVENTURE</span>
+        </div>
+      </div>
+    </section>
+
+    <button id="boost-btn" class="boost-button" type="button" aria-label="Hold to boost">
+      <i id="boost-fill"></i>
+      <span>BOOST</span>
+      <b id="boost-percent">100%</b>
+    </button>
+
+    <div id="drag-stick" class="drag-stick" aria-hidden="true"><i></i></div>
+
+    <section id="title-screen" class="overlay">
+      <div class="title-card">
+        <p class="eyebrow">GYRO COCKPIT FLIGHT</p>
+        <h1>PROPELLA</h1>
+        <div class="wing-rule"><i></i><b>★</b><i></i></div>
+        <p class="lead">蒼空へ。リングをつないで、90秒の冒険飛行。</p>
+        <div class="howto">
+          <span>傾けて操縦</span><span>リングで時間延長</span><span>長押しでブースト</span>
+        </div>
+        <div class="title-actions">
+          <button id="gyro-start-btn" class="primary-button" type="button">ジャイロで飛ぶ</button>
+          <button id="fallback-start-btn" class="secondary-button" type="button">タッチ / PCで飛ぶ</button>
+        </div>
+        <p id="permission-note" class="permission-note">スマホは縦に持ち、普段の持ち方のまま開始してください。</p>
+        <p class="pc-note">PC: WASD / 矢印 / マウス　BOOST: Shift / Space</p>
+      </div>
+    </section>
+
+    <section id="calibration-screen" class="overlay hidden">
+      <div class="calibration-card">
+        <div class="phone-icon"><i></i></div>
+        <p class="eyebrow">CALIBRATION</p>
+        <h2>そのまま構えて</h2>
+        <p>スマホを縦に、いつもの角度で持ってください。</p>
+        <b id="calibration-count">3</b>
+      </div>
+    </section>
+
+    <section id="result-screen" class="overlay hidden">
+      <div class="result-card">
+        <p class="eyebrow">FLIGHT LOG</p>
+        <h2>TIME UP</h2>
+        <dl>
+          <div><dt>SCORE</dt><dd id="result-score">0</dd></div>
+          <div><dt>RINGS</dt><dd id="result-rings">0</dd></div>
+          <div><dt>MAX COMBO</dt><dd id="result-combo">×1</dd></div>
+          <div><dt>BEST</dt><dd id="result-best">0</dd></div>
+        </dl>
+        <button id="restart-btn" class="primary-button" type="button">もう一度飛ぶ</button>
+      </div>
+    </section>
+  </main>
+
+  <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+
+  <script src="lib/three.min.js?v=1"></script>
+  <script src="js/rng.js?v=1"></script>
+  <script src="js/game.js?v=1"></script>
+  <script src="js/renderer.js?v=1"></script>
+  <script src="js/input.js?v=1"></script>
+  <script src="js/audio.js?v=1"></script>
+  <script src="js/debug.js?v=1"></script>
+  <script src="js/main.js?v=1"></script>
+</body>
+</html>

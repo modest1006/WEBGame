@@ -84,6 +84,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8135", "--directory", "games/bubbleex"],
       "port": 8135
+    },
+    {
+      "name": "propella",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8136", "--directory", "games/propella"],
+      "port": 8136
     }
   ]
 }
