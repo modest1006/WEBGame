@@ -39,7 +39,7 @@
       step:function (ms) {
         if (self.game.mode === 'ready') self.game.start();
         const injected = self.input.update(Number(ms) || 0);
-        self.game.setInput(injected);
+        self.game.setInput(injected, self.game.autopilot);
         self.game.update(Number(ms) || 0);
         self.runtime.renderOnce(Number(ms) || 16.7);
         return this.getState();

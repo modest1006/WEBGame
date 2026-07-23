@@ -229,7 +229,7 @@
     dom.speedNeedle.style.transform = 'rotate(' + (-126 + Math.min(1, state.speed / 135) * 252) + 'deg)';
     dom.altReadout.textContent = String(Math.round(state.position.y)).padStart(3, '0');
     dom.altNeedle.style.transform = 'rotate(' + (-126 + state.position.y / 300 * 252) + 'deg)';
-    const pitchShift = state.pitch / (35 * PropellaGame.constants.DEG) * 28;
+    const pitchShift = state.pitch / (20 * PropellaGame.constants.DEG) * 28;
     dom.attitude.style.transform = 'translateY(' + pitchShift + 'px) rotate(' + (-state.roll / PropellaGame.constants.DEG) + 'deg)';
     dom.boostFill.style.height = (state.boostFuel * 100).toFixed(1) + '%';
     dom.boostPercent.textContent = Math.round(state.boostFuel * 100) + '%';
@@ -365,27 +365,38 @@
       return samples;
     }
 
+    function dispatchOrientation(alpha, beta, gamma) {
+      const event = new Event('deviceorientation');
+      Object.defineProperties(event, {
+        alpha:{ value:alpha },
+        beta:{ value:beta },
+        gamma:{ value:gamma }
+      });
+      window.dispatchEvent(event);
+    }
+
     input.clearDebugInput();
     input.resetPointer();
     input.gyro.enabled = true;
-    input.bound.orientation({ alpha:0, beta:75, gamma:0 });
+    window.addEventListener('deviceorientation', input.bound.orientation, true);
+    dispatchOrientation(0, 75, 0);
     const neutralCalibrated = input.calibrate();
 
-    input.bound.orientation({ alpha:0, beta:55, gamma:0 });
+    dispatchOrientation(0, 65, 0);
     const pitchSamples = sampleGyro(30);
     const pitchState = input.getState();
 
-    input.bound.orientation({ alpha:0, beta:75, gamma:0 });
+    dispatchOrientation(0, 75, 0);
     input.calibrate();
     const neutralQuaternion = PropellaOrientationMath.fromEulerZXY(0, 75, 0);
-    const worldYaw = PropellaOrientationMath.axisAngle(0, 0, 1, 20 * PropellaGame.constants.DEG);
+    const worldYaw = PropellaOrientationMath.axisAngle(0, 0, 1, 10 * PropellaGame.constants.DEG);
     const yawedQuaternion = PropellaOrientationMath.multiply(worldYaw, neutralQuaternion);
     const yawedEuler = PropellaOrientationMath.toEulerZXY(yawedQuaternion);
-    input.bound.orientation(yawedEuler);
+    dispatchOrientation(yawedEuler.alpha, yawedEuler.beta, yawedEuler.gamma);
     const turnSamples = sampleGyro(30);
     const turnState = input.getState();
 
-    input.bound.orientation({ alpha:0, beta:88, gamma:0 });
+    dispatchOrientation(0, 88, 0);
     input.calibrate();
     let noiseMaxPitch = 0;
     let noiseMaxRoll = 0;
@@ -393,18 +404,15 @@
     for (let noiseFrame = 0; noiseFrame < 120; noiseFrame++) {
       const alphaNoise = noiseFrame % 4 < 2 ? 2 : -2;
       const gammaNoise = noiseFrame % 6 < 3 ? 2 : -2;
-      input.bound.orientation({
-        alpha:alphaNoise,
-        beta:88 + betaNoise[noiseFrame % betaNoise.length],
-        gamma:gammaNoise
-      });
+      dispatchOrientation(alphaNoise, 88 + betaNoise[noiseFrame % betaNoise.length], gammaNoise);
       const noisy = input.update(16.7);
       noiseMaxPitch = Math.max(noiseMaxPitch, Math.abs(noisy.pitch));
       noiseMaxRoll = Math.max(noiseMaxRoll, Math.abs(noisy.roll));
     }
+    window.removeEventListener('deviceorientation', input.bound.orientation, true);
     report.gyro = {
       neutralCalibrated:neutralCalibrated,
-      pitchEvent:{ alpha:0, beta:55, gamma:0 },
+      pitchEvent:{ alpha:0, beta:65, gamma:0 },
       pitchDegrees:Number(pitchState.pitchDegrees.toFixed(3)),
       pitchSamples:pitchSamples,
       turnQuaternion:yawedQuaternion,
@@ -425,16 +433,57 @@
 
     game.restart();
     game.start();
+    game.teleport(-100, game.position.y, game.position.z);
+    const lateralStart = game.position.x;
+    game.setInput({ pitch:0, roll:1, boost:false });
+    game.update(2000);
+    const lateralAfterInput = {
+      deltaX:Number((game.position.x - lateralStart).toFixed(3)),
+      velocity:Number(game.slideVelocity.x.toFixed(3))
+    };
+    game.setInput({ pitch:0, roll:0, boost:false });
+    const lateralStopSamples = [];
+    for (let stopIndex = 0; stopIndex < 4; stopIndex++) {
+      game.update(250);
+      lateralStopSamples.push(Number(game.slideVelocity.x.toFixed(3)));
+    }
+    report.lateralSlide = {
+      afterTwoSeconds:lateralAfterInput,
+      stopVelocitySamples:lateralStopSamples
+    };
+
+    game.restart();
+    game.start();
+    const verticalStart = game.position.y;
+    game.setInput({ pitch:1, roll:0, boost:false });
+    game.update(2000);
+    report.verticalSlide = {
+      deltaY:Number((game.position.y - verticalStart).toFixed(3)),
+      velocity:Number(game.slideVelocity.y.toFixed(3))
+    };
+
+    game.restart();
+    game.start();
     input.setDebugInput({ pitch:0, roll:0, boost:false });
     game.setInput({ pitch:0, roll:0, boost:false });
     report.aimed = game.aimAtNextRing();
-    game.update(4000);
+    game.update(18000);
     report.ring = {
       score:game.score,
       combo:game.combo,
       remainingMs:Math.round(game.timeMs),
-      ringsPassed:game.ringsPassed
+      ringsPassed:game.ringsPassed,
+      ringsMissed:game.ringsMissed,
+      position:{
+        x:Number(game.position.x.toFixed(3)),
+        y:Number(game.position.y.toFixed(3)),
+        z:Number(game.position.z.toFixed(3))
+      }
     };
+
+    const auditGame = new PropellaGame({ seed:seed });
+    for (let auditIndex = 0; auditIndex < 192; auditIndex++) auditGame.passRing();
+    report.ringGeneration = auditGame.getState().ringAudit;
 
     game.setTime(1);
     game.update(1200);
@@ -465,13 +514,10 @@
 
     game.restart();
     game.start();
-    const mountain = game.mountains[0];
-    if (mountain) {
-      game.teleport(mountain.x, PropellaGame.constants.SEA_Y + 4, mountain.z);
-      game.update(20);
-    }
+    const mountainTriggered = game.forceMountain();
     report.mountain = {
-      available:!!mountain,
+      available:game.mountains.length > 0,
+      triggered:mountainTriggered,
       penaltyMs:Math.round(game.speedPenaltyMs),
       bounceVelocity:Number(game.bounceVelocity.toFixed(2))
     };
@@ -507,7 +553,7 @@
     lastFrame = now;
     try {
       if (autoStep && game.mode === 'play') {
-        game.setInput(input.update(dtMs));
+        game.setInput(input.update(dtMs), game.autopilot);
         game.update(dtMs);
       }
       renderOnce(dtMs);

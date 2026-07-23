@@ -8,23 +8,16 @@
   const BASE_SPEED = 60;
   const BOOST_SPEED = 120;
   const RING_RADIUS = 21;
+  const MAX_X = 160;
+  const MAX_SLIDE_X = 90;
+  const MAX_SLIDE_Y = 70;
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
   function lerp(a, b, t) { return a + (b - a) * t; }
   function length3(x, y, z) { return Math.sqrt(x * x + y * y + z * z); }
   function copyPosition(p) { return { x: p.x, y: p.y, z: p.z }; }
-  function angleWrap(a) {
-    while (a > Math.PI) a -= Math.PI * 2;
-    while (a < -Math.PI) a += Math.PI * 2;
-    return a;
-  }
-  function normalized(x, y, z) {
-    const len = length3(x, y, z) || 1;
-    return { x:x / len, y:y / len, z:z / len };
-  }
   function dot(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
   function distance(a, b) { return length3(a.x - b.x, a.y - b.y, a.z - b.z); }
-  function deepCopy(value) { return JSON.parse(JSON.stringify(value)); }
 
   function comboMultiplier(streak) {
     if (streak <= 1) return 1;
@@ -68,17 +61,27 @@
     this.bounceVelocity = 0;
     this.position = { x:0, y:82, z:0 };
     this.previousPosition = copyPosition(this.position);
+    this.slideVelocity = { x:0, y:0 };
     this.yaw = 0;
     this.pitch = 0;
     this.roll = 0;
     this.input = { pitch:0, roll:0, boost:false };
+    this.autopilot = false;
     this.rings = [];
     this.balloons = [];
     this.mountains = [];
     this.clouds = [];
     this.nextEntityId = 1;
-    this.courseHeading = 0;
+    this.nextRingOrder = 0;
     this.courseCursor = copyPosition(this.position);
+    this.ringAudit = {
+      generated:0,
+      maxAbsDx:0,
+      maxAbsDy:0,
+      minDz:Infinity,
+      maxDz:0,
+      violations:0
+    };
     this.skimTimer = 0;
     this.countdownSecond = -1;
     this.elapsedMs = 0;
@@ -92,8 +95,9 @@
     this.emit('start', {});
   };
 
-  PropellaGame.prototype.setInput = function (input) {
+  PropellaGame.prototype.setInput = function (input, preserveAutopilot) {
     input = input || {};
+    if (!preserveAutopilot) this.autopilot = false;
     if (input.pitch != null) this.input.pitch = clamp(Number(input.pitch) || 0, -1, 1);
     if (input.roll != null) this.input.roll = clamp(Number(input.roll) || 0, -1, 1);
     if (input.boost != null) this.input.boost = !!input.boost;
@@ -105,22 +109,32 @@
     while (future < 8) {
       const previous = this.rings.length ? this.rings[this.rings.length - 1] : null;
       const distanceToNext = previous ? this.rng.range(150, 250) : 185;
-      const turn = previous ? this.rng.range(-40, 40) * DEG : 0;
-      this.courseHeading = angleWrap(this.courseHeading + turn);
-      const yDelta = previous ? this.rng.range(-60, 60) : 0;
       const origin = previous ? previous.position : this.courseCursor;
-      const nextY = clamp(origin.y + yDelta, 30, 265);
+      const xDelta = previous ? this.rng.range(-110, 110) : this.rng.range(-70, 70);
+      const yDelta = previous ? this.rng.range(-70, 70) : this.rng.range(-45, 45);
       const position = {
-        x:origin.x + Math.sin(this.courseHeading) * distanceToNext,
-        y:nextY,
-        z:origin.z + Math.cos(this.courseHeading) * distanceToNext
+        x:clamp(origin.x + xDelta, -140, 140),
+        y:clamp(origin.y + yDelta, 20, 260),
+        z:origin.z + distanceToNext
       };
-      const forward = normalized(position.x - origin.x, position.y - origin.y, position.z - origin.z);
+      const actualDx = position.x - origin.x;
+      const actualDy = position.y - origin.y;
+      const actualDz = position.z - origin.z;
+      this.ringAudit.generated++;
+      this.ringAudit.maxAbsDx = Math.max(this.ringAudit.maxAbsDx, Math.abs(actualDx));
+      this.ringAudit.maxAbsDy = Math.max(this.ringAudit.maxAbsDy, Math.abs(actualDy));
+      this.ringAudit.minDz = Math.min(this.ringAudit.minDz, actualDz);
+      this.ringAudit.maxDz = Math.max(this.ringAudit.maxDz, actualDz);
+      if (Math.abs(position.x) > 140.0001 || position.y < 19.9999 || position.y > 260.0001 ||
+          Math.abs(actualDx) > 110.0001 || Math.abs(actualDy) > 70.0001 ||
+          actualDz < 149.9999 || actualDz > 250.0001) {
+        this.ringAudit.violations++;
+      }
       const ring = {
         id:this.nextEntityId++,
-        order:this.rings.length,
+        order:this.nextRingOrder++,
         position:position,
-        forward:forward,
+        forward:{ x:0, y:0, z:1 },
         radius:RING_RADIUS,
         gold:this.rng.next() < 0.15,
         status:'active'
@@ -139,27 +153,26 @@
 
   PropellaGame.prototype.generateSceneryForRing = function (ring, origin) {
     const side = this.rng.next() < 0.5 ? -1 : 1;
-    const lateralX = Math.cos(this.courseHeading);
-    const lateralZ = -Math.sin(this.courseHeading);
     if (this.rng.next() < 0.64) {
-      const offset = this.rng.range(75, 155) * side;
-      const radius = this.rng.range(30, 62);
+      const corridorMountain = this.rng.next() < .12;
+      const radius = corridorMountain ? this.rng.range(14, 24) : this.rng.range(32, 68);
       this.mountains.push({
         id:this.nextEntityId++,
-        x:ring.position.x + lateralX * offset,
-        z:ring.position.z + lateralZ * offset,
+        x:corridorMountain ? this.rng.range(-135, 135) : this.rng.range(210, 390) * side,
+        z:ring.position.z + this.rng.range(-80, 80),
         radius:radius,
-        height:this.rng.range(45, 105),
-        beach:radius * this.rng.range(1.08, 1.24)
+        height:corridorMountain ? this.rng.range(12, 28) : this.rng.range(48, 112),
+        beach:radius * this.rng.range(1.08, 1.24),
+        corridor:corridorMountain
       });
     }
     if (this.rng.next() < 0.5) {
       this.balloons.push({
         id:this.nextEntityId++,
         position:{
-          x:lerp(origin.x, ring.position.x, this.rng.range(.28, .74)) + lateralX * this.rng.range(-45, 45),
+          x:clamp(lerp(origin.x, ring.position.x, this.rng.range(.28, .74)) + this.rng.range(-55, 55), -150, 150),
           y:clamp(lerp(origin.y, ring.position.y, .5) + this.rng.range(-28, 35), 24, 270),
-          z:lerp(origin.z, ring.position.z, this.rng.range(.28, .74)) + lateralZ * this.rng.range(-45, 45)
+          z:lerp(origin.z, ring.position.z, this.rng.range(.28, .74))
         },
         radius:9,
         color:this.rng.next() < .5 ? '#d84e3d' : '#edb83f',
@@ -170,9 +183,9 @@
       this.clouds.push({
         id:this.nextEntityId++,
         position:{
-          x:lerp(origin.x, ring.position.x, this.rng.range(.2, .8)) + lateralX * this.rng.range(-80, 80),
+          x:clamp(lerp(origin.x, ring.position.x, this.rng.range(.2, .8)) + this.rng.range(-100, 100), -220, 220),
           y:clamp(lerp(origin.y, ring.position.y, .5) + this.rng.range(-20, 30), 35, 270),
-          z:lerp(origin.z, ring.position.z, this.rng.range(.2, .8)) + lateralZ * this.rng.range(-80, 80)
+          z:lerp(origin.z, ring.position.z, this.rng.range(.2, .8))
         },
         radius:this.rng.range(22, 38),
         inside:false
@@ -203,6 +216,22 @@
     }
   };
 
+  PropellaGame.prototype.updateAutopilot = function () {
+    const ring = this.nextRing();
+    if (!ring) {
+      this.input.pitch = 0;
+      this.input.roll = 0;
+      return false;
+    }
+    const dz = Math.max(.25, ring.position.z - this.position.z);
+    const timeToRing = Math.max(.3, dz / Math.max(1, this.speed));
+    const desiredX = clamp((ring.position.x - this.position.x) / Math.max(.3, timeToRing * .78), -MAX_SLIDE_X, MAX_SLIDE_X);
+    const desiredY = clamp((ring.position.y - this.position.y) / Math.max(.3, timeToRing * .78), -MAX_SLIDE_Y, MAX_SLIDE_Y);
+    this.input.roll = desiredX / MAX_SLIDE_X;
+    this.input.pitch = desiredY / MAX_SLIDE_Y;
+    return true;
+  };
+
   PropellaGame.prototype.fixedStep = function (dtMs) {
     const dt = dtMs / 1000;
     this.elapsedMs += dtMs;
@@ -219,22 +248,30 @@
       this.emit('countdown', { second:secondsLeft });
     }
 
-    const targetPitch = this.input.pitch * 35 * DEG;
-    const targetRoll = this.input.roll * 40 * DEG;
+    if (this.autopilot) this.updateAutopilot();
+
+    let targetSlideX = this.input.roll * MAX_SLIDE_X;
+    let targetSlideY = this.input.pitch * MAX_SLIDE_Y;
+    if (this.position.x > 136 && targetSlideX > 0) {
+      targetSlideX *= clamp((MAX_X - this.position.x) / (MAX_X - 136), 0, 1);
+    } else if (this.position.x < -136 && targetSlideX < 0) {
+      targetSlideX *= clamp((MAX_X + this.position.x) / (MAX_X - 136), 0, 1);
+    }
+    if (this.position.y > 276 && targetSlideY > 0) {
+      targetSlideY *= clamp((CEILING_Y - this.position.y) / (CEILING_Y - 276), 0, 1);
+    } else if (this.position.y < 24 && targetSlideY < 0) {
+      targetSlideY *= clamp((this.position.y - SEA_Y) / (24 - SEA_Y), 0, 1);
+    }
+    const slideEase = 1 - Math.exp(-dt * 4.6);
+    this.slideVelocity.x = lerp(this.slideVelocity.x, targetSlideX, slideEase);
+    this.slideVelocity.y = lerp(this.slideVelocity.y, targetSlideY, slideEase);
+
+    const targetPitch = (this.slideVelocity.y / MAX_SLIDE_Y) * 20 * DEG;
+    const targetRoll = (this.slideVelocity.x / MAX_SLIDE_X) * 30 * DEG;
     const attitudeEase = 1 - Math.exp(-dt * 4.8);
     this.pitch = lerp(this.pitch, targetPitch, attitudeEase);
     this.roll = lerp(this.roll, targetRoll, attitudeEase);
-
-    if (this.position.y < 24) {
-      const lift = (24 - this.position.y) / 22;
-      this.pitch = lerp(this.pitch, 22 * DEG, clamp(lift * dt * 6, 0, 1));
-    } else if (this.position.y > 278) {
-      const down = (this.position.y - 278) / 22;
-      this.pitch = lerp(this.pitch, -22 * DEG, clamp(down * dt * 6, 0, 1));
-    }
-
-    const maxYawRate = 40 * DEG;
-    this.yaw = angleWrap(this.yaw + (this.roll / (40 * DEG)) * maxYawRate * dt);
+    this.yaw = 0;
 
     if (this.speedPenaltyMs > 0) this.speedPenaltyMs = Math.max(0, this.speedPenaltyMs - dtMs);
     this.boosting = this.input.boost && this.boostFuel > .001 && this.speedPenaltyMs <= 0;
@@ -246,22 +283,28 @@
     this.speed += (targetSpeed - this.speed) * (1 - Math.exp(-dt * 3.1));
 
     this.previousPosition = copyPosition(this.position);
-    const cp = Math.cos(this.pitch);
-    this.position.x += Math.sin(this.yaw) * cp * this.speed * dt;
-    this.position.z += Math.cos(this.yaw) * cp * this.speed * dt;
-    this.position.y += Math.sin(this.pitch) * this.speed * dt;
+    this.position.x += this.slideVelocity.x * dt;
+    this.position.y += this.slideVelocity.y * dt;
+    this.position.z += this.speed * dt;
     if (this.bounceVelocity !== 0) {
       this.position.y += this.bounceVelocity * dt;
       this.bounceVelocity -= 36 * dt;
       if (this.bounceVelocity < 0 && this.position.y <= SEA_Y + 1) this.bounceVelocity = 0;
     }
+    if (this.position.x < -MAX_X || this.position.x > MAX_X) {
+      this.position.x = clamp(this.position.x, -MAX_X, MAX_X);
+      if ((this.position.x <= -MAX_X && this.slideVelocity.x < 0) ||
+          (this.position.x >= MAX_X && this.slideVelocity.x > 0)) {
+        this.slideVelocity.x *= .35;
+      }
+    }
     if (this.position.y < SEA_Y) {
-      this.position.y += (SEA_Y - this.position.y) * Math.min(1, dt * 10);
-      if (this.position.y < SEA_Y - .05) this.position.y = SEA_Y - .05;
+      this.position.y = SEA_Y;
+      if (this.slideVelocity.y < 0) this.slideVelocity.y *= .35;
     }
     if (this.position.y > CEILING_Y) {
-      this.position.y += (CEILING_Y - this.position.y) * Math.min(1, dt * 10);
-      if (this.position.y > CEILING_Y + .05) this.position.y = CEILING_Y + .05;
+      this.position.y = CEILING_Y;
+      if (this.slideVelocity.y > 0) this.slideVelocity.y *= .35;
     }
 
     this.checkRingCrossings();
@@ -387,13 +430,13 @@
       const surface = SEA_Y + mountain.height * Math.pow(1 - normalizedRadius, .72);
       if (this.position.y > surface + 4) continue;
       const inv = 1 / (horizontal || 1);
-      const nx = horizontal < .001 ? Math.cos(this.yaw) : dx * inv;
-      const nz = horizontal < .001 ? -Math.sin(this.yaw) : dz * inv;
-      this.position.x = mountain.x + nx * (mountain.radius + 5);
-      this.position.z = mountain.z + nz * (mountain.radius + 5);
+      const nx = horizontal < .001 ? (mountain.x >= 0 ? -1 : 1) : dx * inv;
+      this.position.x = clamp(mountain.x + nx * (mountain.radius + 5), -MAX_X, MAX_X);
+      this.position.z = Math.min(this.position.z, mountain.z - mountain.radius * .55);
       this.position.y = Math.max(this.position.y, surface + 7);
-      this.yaw = angleWrap(Math.atan2(nx, nz) + this.rng.range(-.22, .22));
       this.pitch = Math.max(this.pitch, 15 * DEG);
+      this.slideVelocity.x = nx * 55;
+      this.slideVelocity.y = Math.max(this.slideVelocity.y, 24);
       this.bounceVelocity = 31;
       this.speedPenaltyMs = 2000;
       this.speed *= .48;
@@ -436,6 +479,7 @@
     this.mode = 'result';
     this.input.boost = false;
     this.boosting = false;
+    this.autopilot = false;
     if (this.score > this.bestScore) this.bestScore = this.score;
     this.emit('finish', {
       score:this.score,
@@ -450,22 +494,17 @@
     this.position.y = clamp(Number(y) || SEA_Y, SEA_Y, CEILING_Y);
     this.position.z = Number(z) || 0;
     this.previousPosition = copyPosition(this.position);
+    this.slideVelocity.x = 0;
+    this.slideVelocity.y = 0;
+    this.autopilot = false;
     this.emit('teleport', { position:copyPosition(this.position) });
   };
 
   PropellaGame.prototype.aimAtNextRing = function () {
     const ring = this.nextRing();
     if (!ring) return false;
-    const dx = ring.position.x - this.position.x;
-    const dy = ring.position.y - this.position.y;
-    const dz = ring.position.z - this.position.z;
-    const horizontal = Math.sqrt(dx * dx + dz * dz) || 1;
-    this.yaw = Math.atan2(dx, dz);
-    this.pitch = Math.atan2(dy, horizontal);
-    this.roll = 0;
-    this.input.pitch = clamp(this.pitch / (35 * DEG), -1, 1);
-    this.input.roll = 0;
-    return true;
+    this.autopilot = true;
+    return this.updateAutopilot();
   };
 
   PropellaGame.prototype.setTime = function (seconds) {
@@ -502,6 +541,8 @@
       seed:this.seed,
       position:copyPosition(this.position),
       attitude:{ yaw:this.yaw, pitch:this.pitch, roll:this.roll },
+      slideVelocity:{ x:this.slideVelocity.x, y:this.slideVelocity.y },
+      autopilot:this.autopilot,
       speed:this.speed,
       baseSpeed:BASE_SPEED,
       boostSpeed:BOOST_SPEED,
@@ -518,6 +559,14 @@
       ringsMissed:this.ringsMissed,
       balloonsPopped:this.balloonsPopped,
       bestScore:this.bestScore,
+      ringAudit:{
+        generated:this.ringAudit.generated,
+        maxAbsDx:this.ringAudit.maxAbsDx,
+        maxAbsDy:this.ringAudit.maxAbsDy,
+        minDz:isFinite(this.ringAudit.minDz) ? this.ringAudit.minDz : 0,
+        maxDz:this.ringAudit.maxDz,
+        violations:this.ringAudit.violations
+      },
       nextRingId:next ? next.id : null,
       rings:this.rings.map(function (ring) {
         return {
@@ -534,7 +583,7 @@
         return { id:b.id, position:copyPosition(b.position), radius:b.radius, color:b.color };
       }),
       mountains:this.mountains.map(function (m) {
-        return { id:m.id, x:m.x, z:m.z, radius:m.radius, height:m.height, beach:m.beach };
+        return { id:m.id, x:m.x, z:m.z, radius:m.radius, height:m.height, beach:m.beach, corridor:!!m.corridor };
       }),
       clouds:this.clouds.map(function (c) {
         return { id:c.id, position:copyPosition(c.position), radius:c.radius };
@@ -547,7 +596,7 @@
     const lines = [
       'PROPELLA seed=' + this.seed + ' mode=' + this.mode,
       'pos=(' + this.position.x.toFixed(1) + ',' + this.position.y.toFixed(1) + ',' + this.position.z.toFixed(1) + ') speed=' + this.speed.toFixed(1),
-      'attitude yaw=' + (this.yaw / DEG).toFixed(1) + ' pitch=' + (this.pitch / DEG).toFixed(1) + ' roll=' + (this.roll / DEG).toFixed(1),
+      'slide=(' + this.slideVelocity.x.toFixed(1) + ',' + this.slideVelocity.y.toFixed(1) + ') attitude pitch=' + (this.pitch / DEG).toFixed(1) + ' roll=' + (this.roll / DEG).toFixed(1),
       'score=' + this.score + ' combo=' + this.combo + ' x' + comboMultiplier(this.combo) + ' time=' + (this.timeMs / 1000).toFixed(2),
       next ? 'NEXT #' + next.id + (next.gold ? ' GOLD' : '') + ' @ (' + next.position.x.toFixed(0) + ',' + next.position.y.toFixed(0) + ',' + next.position.z.toFixed(0) + ')' : 'NEXT none',
       'future rings=' + this.rings.filter(function (r) { return r.status === 'active'; }).length + ' balloons=' + this.balloons.filter(function (b) { return b.alive; }).length + ' islands=' + this.mountains.length
@@ -561,6 +610,9 @@
     CEILING_Y:CEILING_Y,
     BASE_SPEED:BASE_SPEED,
     BOOST_SPEED:BOOST_SPEED,
+    MAX_X:MAX_X,
+    MAX_SLIDE_X:MAX_SLIDE_X,
+    MAX_SLIDE_Y:MAX_SLIDE_Y,
     RING_RADIUS:RING_RADIUS,
     DEG:DEG
   };

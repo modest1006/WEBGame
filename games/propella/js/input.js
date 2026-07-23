@@ -15,7 +15,7 @@
     return sign * clamp((magnitude - zone) / (full - zone), 0, 1);
   }
   function expo(value) {
-    return (value < 0 ? -1 : 1) * value * value;
+    return value * Math.sqrt(Math.abs(value));
   }
   function quaternion(x, y, z, w) {
     return { x:x, y:y, z:z, w:w };
@@ -353,8 +353,8 @@
       const axes = this.gyroAxes();
       this.gyro.rawPitchDegrees = axes.pitchDegrees;
       this.gyro.rawTurnDegrees = axes.turnDegrees;
-      const rawPitch = expo(deadzone(axes.pitchDegrees, 2, 25));
-      const rawRoll = expo(deadzone(axes.turnDegrees, 3, 35));
+      const rawPitch = expo(deadzone(axes.pitchDegrees, 2, 18));
+      const rawRoll = expo(deadzone(axes.turnDegrees, 2, 18));
       const filter = 1 - Math.exp(-dt * 8);
       this.gyro.filteredPitch += (rawPitch - this.gyro.filteredPitch) * filter;
       this.gyro.filteredRoll += (rawRoll - this.gyro.filteredRoll) * filter;
