@@ -90,6 +90,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8136", "--directory", "games/propella"],
       "port": 8136
+    },
+    {
+      "name": "ghostlens",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8137", "--directory", "games/ghostlens"],
+      "port": 8137
     }
   ]
 }

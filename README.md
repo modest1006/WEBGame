@@ -22,6 +22,7 @@
 | [ワンマン運転士 ONE-MAN DRIVER](games/oneman/) | 3D鉄道運転 | 残り600mからブレーキだけで停止位置を狙うワンマン運転士シミュレーター（Three.js） |
 | [BUBBLE BLASTER EX](games/bubbleex/) | パズル | 壁反射×同色3つ消しのオリジナルパズルボブル。2000年代アーケードの筐体演出＋光沢3Dバブル。全8ステージ（Three.js） |
 | [PROPELLA](games/propella/) | 3Dフライト | スマホの傾き（ジャイロ）で操るコックピット視点プロペラ機。リングを潜ってコンボを繋ぐ時間制スコアアタック（Three.js） |
+| [GHOST LENS](games/ghostlens/) | ホラー撮影 | スマホを心霊カメラに見立て、ジャイロで360°見回して怪異を撮影・除霊。立体音響の気配で探すスコアアタック（Three.js） |
 
 ## 遊び方
 

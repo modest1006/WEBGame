@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#05080a">
+  <title>GHOST LENS 〜心霊写真館〜</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="css/style.css?v=1">
+</head>
+<body>
+  <main id="game-shell" class="game-shell">
+    <canvas id="world" aria-label="廃洋館を映す心霊カメラのファインダー"></canvas>
+
+    <div id="noise-field" class="noise-field" aria-hidden="true"></div>
+    <div class="scanlines" aria-hidden="true"></div>
+    <div id="interference" class="interference" aria-hidden="true"><span>NO SIGNAL</span></div>
+    <div id="danger-vignette" class="danger-vignette" aria-hidden="true"></div>
+    <div id="flash" class="flash" aria-hidden="true"></div>
+    <div id="camera-shake" class="camera-shake" aria-hidden="true"></div>
+
+    <section id="hud" class="hud hidden" aria-label="心霊カメラ情報">
+      <div class="hud-top">
+        <div class="recording"><i></i> REC <small id="date-stamp">2026.07.24</small></div>
+        <div id="time-box" class="time-box"><span>TIME</span><b id="time-value">90.0</b></div>
+        <div class="technical"><span>ISO 3200</span><span>F 2.8</span></div>
+      </div>
+
+      <div class="viewfinder-corner tl"></div><div class="viewfinder-corner tr"></div>
+      <div class="viewfinder-corner bl"></div><div class="viewfinder-corner br"></div>
+
+      <div id="reticle" class="reticle" aria-hidden="true">
+        <div id="focus-ring" class="focus-ring"></div>
+        <i class="focus-dot"></i>
+        <span id="focus-label">SEARCH</span>
+      </div>
+
+      <div class="hud-bottom">
+        <div class="score-panel">
+          <span>SCORE</span><b id="score-value">000000</b>
+          <em id="combo-value">NO COMBO</em>
+        </div>
+        <div class="emf-panel">
+          <span>EMF</span>
+          <div class="emf-gauge"><i id="emf-needle"></i><b>0</b><b>5</b></div>
+        </div>
+        <div class="film-panel">
+          <span>FILM</span><b id="film-value">12</b><small>/ 12</small>
+          <div id="reload-bar" class="reload-bar"><i></i></div>
+        </div>
+      </div>
+
+      <div class="hud-actions">
+        <button id="calibrate-btn" class="utility-btn" type="button" title="現在の向きを正面に再設定">◎ NEUTRAL</button>
+        <button id="zoom-btn" class="utility-btn" type="button" aria-pressed="false">⌕ 1.0×</button>
+        <button id="mute-btn" class="utility-btn" type="button" aria-pressed="false">♪ SOUND</button>
+      </div>
+      <button id="shutter-btn" class="shutter-btn" type="button" aria-label="シャッターを切る"><i></i></button>
+    </section>
+
+    <div id="message" class="message" aria-live="polite"></div>
+    <div id="polaroid-tray" class="polaroid-tray" aria-hidden="true"></div>
+
+    <section id="title-screen" class="screen title-screen">
+      <div class="title-grain"></div>
+      <div class="title-content">
+        <p class="eyebrow">ABANDONED MANOR / CASE 07</p>
+        <h1><span>GHOST</span> LENS</h1>
+        <h2>ゴーストレンズ <small>〜心霊写真館〜</small></h2>
+        <p class="tagline">見えないものは、音のする方にいる。</p>
+        <div class="headphone-note">◖ HEADPHONES RECOMMENDED ◗<br><small>立体音響で怪異の方角を探してください</small></div>
+        <button id="gyro-start-btn" class="primary-btn" type="button">ジャイロで構える</button>
+        <button id="fallback-start-btn" class="secondary-btn" type="button">ドラッグ操作で入館</button>
+        <p class="controls-note">端末を構えて360°見回す / 中央で0.6秒静止 / タップで撮影</p>
+      </div>
+    </section>
+
+    <section id="result-screen" class="screen result-screen hidden" aria-labelledby="result-title">
+      <div class="result-header">
+        <p>DEVELOPMENT COMPLETE</p>
+        <h2 id="result-title">心霊写真鑑定書</h2>
+        <div class="result-stats">
+          <div><span>SCORE</span><b id="result-score">0</b></div>
+          <div><span>CAPTURED</span><b id="result-captures">0</b></div>
+          <div><span>MAX COMBO</span><b id="result-combo">0</b></div>
+          <div><span>BEST</span><b id="result-best">0</b></div>
+        </div>
+      </div>
+      <div id="album" class="album" aria-label="撮影した心霊写真"></div>
+      <button id="restart-btn" class="primary-btn" type="button">もう一度 入館する</button>
+    </section>
+
+    <pre id="debug-overlay" class="debug-overlay hidden"></pre>
+  </main>
+
+  <script src="lib/three.min.js"></script>
+  <script src="js/game.js?v=1"></script>
+  <script src="js/input.js?v=1"></script>
+  <script src="js/audio.js?v=1"></script>
+  <script src="js/renderer.js?v=1"></script>
+  <script src="js/main.js?v=1"></script>
+  <script src="js/debug.js?v=1"></script>
+</body>
+</html>
