@@ -220,7 +220,7 @@
     }
 
     const targetPitch = this.input.pitch * 35 * DEG;
-    const targetRoll = this.input.roll * 55 * DEG;
+    const targetRoll = this.input.roll * 40 * DEG;
     const attitudeEase = 1 - Math.exp(-dt * 4.8);
     this.pitch = lerp(this.pitch, targetPitch, attitudeEase);
     this.roll = lerp(this.roll, targetRoll, attitudeEase);
@@ -233,8 +233,8 @@
       this.pitch = lerp(this.pitch, -22 * DEG, clamp(down * dt * 6, 0, 1));
     }
 
-    const maxYawRate = 55 * DEG;
-    this.yaw = angleWrap(this.yaw + (this.roll / (55 * DEG)) * maxYawRate * dt);
+    const maxYawRate = 40 * DEG;
+    this.yaw = angleWrap(this.yaw + (this.roll / (40 * DEG)) * maxYawRate * dt);
 
     if (this.speedPenaltyMs > 0) this.speedPenaltyMs = Math.max(0, this.speedPenaltyMs - dtMs);
     this.boosting = this.input.boost && this.boostFuel > .001 && this.speedPenaltyMs <= 0;

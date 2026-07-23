@@ -349,6 +349,80 @@
     let skimEvents = 0;
     game.on(function (type) { if (type === 'seaSkim') skimEvents++; });
 
+    function sampleGyro(frames) {
+      const samples = [];
+      let value = { pitch:0, roll:0 };
+      for (let frame = 1; frame <= frames; frame++) {
+        value = input.update(16.7);
+        if (frame === 1 || frame === 5 || frame === 10 || frame === frames) {
+          samples.push({
+            frame:frame,
+            pitch:Number(value.pitch.toFixed(4)),
+            roll:Number(value.roll.toFixed(4))
+          });
+        }
+      }
+      return samples;
+    }
+
+    input.clearDebugInput();
+    input.resetPointer();
+    input.gyro.enabled = true;
+    input.bound.orientation({ alpha:0, beta:75, gamma:0 });
+    const neutralCalibrated = input.calibrate();
+
+    input.bound.orientation({ alpha:0, beta:55, gamma:0 });
+    const pitchSamples = sampleGyro(30);
+    const pitchState = input.getState();
+
+    input.bound.orientation({ alpha:0, beta:75, gamma:0 });
+    input.calibrate();
+    const neutralQuaternion = PropellaOrientationMath.fromEulerZXY(0, 75, 0);
+    const worldYaw = PropellaOrientationMath.axisAngle(0, 0, 1, 20 * PropellaGame.constants.DEG);
+    const yawedQuaternion = PropellaOrientationMath.multiply(worldYaw, neutralQuaternion);
+    const yawedEuler = PropellaOrientationMath.toEulerZXY(yawedQuaternion);
+    input.bound.orientation(yawedEuler);
+    const turnSamples = sampleGyro(30);
+    const turnState = input.getState();
+
+    input.bound.orientation({ alpha:0, beta:88, gamma:0 });
+    input.calibrate();
+    let noiseMaxPitch = 0;
+    let noiseMaxRoll = 0;
+    const betaNoise = [-2, 2, -1, 1];
+    for (let noiseFrame = 0; noiseFrame < 120; noiseFrame++) {
+      const alphaNoise = noiseFrame % 4 < 2 ? 2 : -2;
+      const gammaNoise = noiseFrame % 6 < 3 ? 2 : -2;
+      input.bound.orientation({
+        alpha:alphaNoise,
+        beta:88 + betaNoise[noiseFrame % betaNoise.length],
+        gamma:gammaNoise
+      });
+      const noisy = input.update(16.7);
+      noiseMaxPitch = Math.max(noiseMaxPitch, Math.abs(noisy.pitch));
+      noiseMaxRoll = Math.max(noiseMaxRoll, Math.abs(noisy.roll));
+    }
+    report.gyro = {
+      neutralCalibrated:neutralCalibrated,
+      pitchEvent:{ alpha:0, beta:55, gamma:0 },
+      pitchDegrees:Number(pitchState.pitchDegrees.toFixed(3)),
+      pitchSamples:pitchSamples,
+      turnQuaternion:yawedQuaternion,
+      turnEvent:{
+        alpha:Number(yawedEuler.alpha.toFixed(6)),
+        beta:Number(yawedEuler.beta.toFixed(6)),
+        gamma:Number(yawedEuler.gamma.toFixed(6))
+      },
+      turnDegrees:Number(turnState.turnDegrees.toFixed(3)),
+      turnSamples:turnSamples,
+      gimbalNoise:{
+        neutralBeta:88,
+        eulerNoiseDegrees:2,
+        maxAbsPitch:Number(noiseMaxPitch.toFixed(5)),
+        maxAbsRoll:Number(noiseMaxRoll.toFixed(5))
+      }
+    };
+
     game.restart();
     game.start();
     input.setDebugInput({ pitch:0, roll:0, boost:false });

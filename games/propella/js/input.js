@@ -1,6 +1,7 @@
 (function () {
   'use strict';
 
+  const DEG = Math.PI / 180;
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
   function shortestDegrees(value) {
     while (value > 180) value -= 360;
@@ -12,6 +13,88 @@
     const magnitude = Math.abs(value);
     if (magnitude <= zone) return 0;
     return sign * clamp((magnitude - zone) / (full - zone), 0, 1);
+  }
+  function expo(value) {
+    return (value < 0 ? -1 : 1) * value * value;
+  }
+  function quaternion(x, y, z, w) {
+    return { x:x, y:y, z:z, w:w };
+  }
+  function normalizeQuaternion(q) {
+    const length = Math.sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w) || 1;
+    return quaternion(q.x / length, q.y / length, q.z / length, q.w / length);
+  }
+  function multiplyQuaternion(a, b) {
+    return quaternion(
+      a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
+      a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
+      a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
+      a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
+    );
+  }
+  function inverseUnitQuaternion(q) {
+    return quaternion(-q.x, -q.y, -q.z, q.w);
+  }
+  function axisAngleQuaternion(x, y, z, angle) {
+    const half = angle * .5;
+    const sine = Math.sin(half);
+    return quaternion(x * sine, y * sine, z * sine, Math.cos(half));
+  }
+  function quaternionFromEulerZXY(alpha, beta, gamma) {
+    const qz = axisAngleQuaternion(0, 0, 1, (Number(alpha) || 0) * DEG);
+    const qx = axisAngleQuaternion(1, 0, 0, (Number(beta) || 0) * DEG);
+    const qy = axisAngleQuaternion(0, 1, 0, (Number(gamma) || 0) * DEG);
+    return normalizeQuaternion(multiplyQuaternion(multiplyQuaternion(qz, qx), qy));
+  }
+  function rotateVector(q, vector) {
+    const pure = quaternion(vector.x, vector.y, vector.z, 0);
+    const rotated = multiplyQuaternion(multiplyQuaternion(q, pure), inverseUnitQuaternion(q));
+    return { x:rotated.x, y:rotated.y, z:rotated.z };
+  }
+  function horizontalLength(vector) {
+    return Math.sqrt(vector.x * vector.x + vector.y * vector.y);
+  }
+  function elevationDegrees(vector) {
+    return Math.atan2(vector.z, horizontalLength(vector)) / DEG;
+  }
+  function azimuthDegrees(vector) {
+    return Math.atan2(vector.x, -vector.y) / DEG;
+  }
+  function quaternionToEulerZXY(q) {
+    q = normalizeQuaternion(q);
+    const xx = q.x * q.x;
+    const yy = q.y * q.y;
+    const zz = q.z * q.z;
+    const xy = q.x * q.y;
+    const xz = q.x * q.z;
+    const yz = q.y * q.z;
+    const wx = q.w * q.x;
+    const wy = q.w * q.y;
+    const wz = q.w * q.z;
+    const m12 = 2 * (xy - wz);
+    const m22 = 1 - 2 * (xx + zz);
+    const m31 = 2 * (xz - wy);
+    const m32 = 2 * (yz + wx);
+    const m33 = 1 - 2 * (xx + yy);
+    const beta = Math.asin(clamp(m32, -1, 1));
+    const cosineBeta = Math.cos(beta);
+    let alpha;
+    let gamma;
+    if (Math.abs(cosineBeta) > .00001) {
+      alpha = Math.atan2(-m12, m22);
+      gamma = Math.atan2(-m31, m33);
+    } else {
+      alpha = Math.atan2(2 * (xy + wz), 1 - 2 * (yy + zz));
+      gamma = 0;
+    }
+    return {
+      alpha:shortestDegrees(alpha / DEG),
+      beta:beta / DEG,
+      gamma:shortestDegrees(gamma / DEG)
+    };
+  }
+  function cloneQuaternion(q) {
+    return q ? quaternion(q.x, q.y, q.z, q.w) : null;
   }
 
   function PropellaInput(options) {
@@ -28,10 +111,18 @@
       supported:typeof window.DeviceOrientationEvent !== 'undefined',
       enabled:false,
       permission:'unknown',
+      alpha:null,
       beta:null,
       gamma:null,
-      neutralBeta:null,
-      neutralGamma:null,
+      quaternion:null,
+      neutralQuaternion:null,
+      relativeQuaternion:null,
+      neutralNormal:null,
+      neutralTurnVector:null,
+      neutralPitchDegrees:0,
+      neutralTurnDegrees:0,
+      rawPitchDegrees:0,
+      rawTurnDegrees:0,
       filteredPitch:0,
       filteredRoll:0,
       calibrated:false
@@ -63,8 +154,14 @@
     };
     this.bound.orientation = function (event) {
       if (event.beta == null || event.gamma == null) return;
-      self.gyro.beta = Number(event.beta);
-      self.gyro.gamma = Number(event.gamma);
+      const alpha = event.alpha == null ? 0 : Number(event.alpha);
+      const beta = Number(event.beta);
+      const gamma = Number(event.gamma);
+      if (!isFinite(alpha) || !isFinite(beta) || !isFinite(gamma)) return;
+      self.gyro.alpha = alpha;
+      self.gyro.beta = beta;
+      self.gyro.gamma = gamma;
+      self.gyro.quaternion = quaternionFromEulerZXY(alpha, beta, gamma);
     };
     this.bound.orientationchange = function () {
       if (self.gyro.enabled) {
@@ -167,13 +264,41 @@
   };
 
   PropellaInput.prototype.calibrate = function () {
-    if (!this.gyro.enabled || this.gyro.beta == null || this.gyro.gamma == null) return false;
-    this.gyro.neutralBeta = this.gyro.beta;
-    this.gyro.neutralGamma = this.gyro.gamma;
+    if (!this.gyro.enabled || !this.gyro.quaternion) return false;
+    const neutral = cloneQuaternion(this.gyro.quaternion);
+    const normal = rotateVector(neutral, { x:0, y:0, z:1 });
+    const top = rotateVector(neutral, { x:0, y:1, z:0 });
+    const turnVector = horizontalLength(normal) >= .25 ? normal : top;
+    this.gyro.neutralQuaternion = neutral;
+    this.gyro.relativeQuaternion = quaternion(0, 0, 0, 1);
+    this.gyro.neutralNormal = normal;
+    this.gyro.neutralTurnVector = turnVector;
+    this.gyro.neutralPitchDegrees = elevationDegrees(normal);
+    this.gyro.neutralTurnDegrees = azimuthDegrees(turnVector);
+    this.gyro.rawPitchDegrees = 0;
+    this.gyro.rawTurnDegrees = 0;
     this.gyro.filteredPitch = 0;
     this.gyro.filteredRoll = 0;
     this.gyro.calibrated = true;
     return true;
+  };
+
+  PropellaInput.prototype.gyroAxes = function () {
+    const gyro = this.gyro;
+    if (!gyro.calibrated || !gyro.quaternion || !gyro.neutralQuaternion) {
+      return { pitchDegrees:0, turnDegrees:0 };
+    }
+    const relative = normalizeQuaternion(multiplyQuaternion(
+      gyro.quaternion,
+      inverseUnitQuaternion(gyro.neutralQuaternion)
+    ));
+    gyro.relativeQuaternion = relative;
+    const normal = rotateVector(relative, gyro.neutralNormal);
+    const turnVector = rotateVector(relative, gyro.neutralTurnVector);
+    return {
+      pitchDegrees:gyro.neutralPitchDegrees - elevationDegrees(normal),
+      turnDegrees:shortestDegrees(azimuthDegrees(turnVector) - gyro.neutralTurnDegrees)
+    };
   };
 
   PropellaInput.prototype.setDebugInput = function (input) {
@@ -225,8 +350,11 @@
       pitch = this.keyboardAxis.pitch;
       roll = this.keyboardAxis.roll;
     } else if (this.gyro.enabled && this.gyro.calibrated) {
-      const rawPitch = deadzone(shortestDegrees(this.gyro.beta - this.gyro.neutralBeta), 2, 25);
-      const rawRoll = deadzone(shortestDegrees(this.gyro.gamma - this.gyro.neutralGamma), 2, 25);
+      const axes = this.gyroAxes();
+      this.gyro.rawPitchDegrees = axes.pitchDegrees;
+      this.gyro.rawTurnDegrees = axes.turnDegrees;
+      const rawPitch = expo(deadzone(axes.pitchDegrees, 2, 25));
+      const rawRoll = expo(deadzone(axes.turnDegrees, 3, 35));
       const filter = 1 - Math.exp(-dt * 8);
       this.gyro.filteredPitch += (rawPitch - this.gyro.filteredPitch) * filter;
       this.gyro.filteredRoll += (rawRoll - this.gyro.filteredRoll) * filter;
@@ -249,13 +377,28 @@
       gyroEnabled:this.gyro.enabled,
       gyroPermission:this.gyro.permission,
       calibrated:this.gyro.calibrated,
+      alpha:this.gyro.alpha,
       beta:this.gyro.beta,
       gamma:this.gyro.gamma,
-      neutralBeta:this.gyro.neutralBeta,
-      neutralGamma:this.gyro.neutralGamma,
+      quaternion:cloneQuaternion(this.gyro.quaternion),
+      neutralQuaternion:cloneQuaternion(this.gyro.neutralQuaternion),
+      relativeQuaternion:cloneQuaternion(this.gyro.relativeQuaternion),
+      pitchDegrees:this.gyro.rawPitchDegrees,
+      turnDegrees:this.gyro.rawTurnDegrees,
+      filteredPitch:this.gyro.filteredPitch,
+      filteredRoll:this.gyro.filteredRoll,
       debugOverride:!!this.debugOverride
     };
   };
 
+  window.PropellaOrientationMath = {
+    fromEulerZXY:quaternionFromEulerZXY,
+    toEulerZXY:quaternionToEulerZXY,
+    multiply:multiplyQuaternion,
+    inverse:inverseUnitQuaternion,
+    axisAngle:axisAngleQuaternion,
+    rotateVector:rotateVector,
+    shortestDegrees:shortestDegrees
+  };
   window.PropellaInput = PropellaInput;
 })();
