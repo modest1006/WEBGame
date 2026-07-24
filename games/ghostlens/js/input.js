@@ -2,6 +2,11 @@
   'use strict';
 
   const DEG = Math.PI / 180;
+  const DRAG_THRESHOLD_PX = 8;
+  const FLICK_THRESHOLD_PX_PER_SEC = 1200;
+  const FLICK_MAX_DEG_PER_SEC = 300;
+  const INERTIA_TIME_CONSTANT_SEC = .4;
+  const INERTIA_MAX_SEC = .9;
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
   function shortestDegrees(v) {
     while (v > 180) v -= 360;
@@ -51,7 +56,21 @@
     this.keys = {};
     this.pose = { yaw:0, pitch:0 };
     this.targetPose = { yaw:0, pitch:0 };
-    this.pointer = { active:false, id:null, x:0, y:0, moved:0, type:'' };
+    this.dragOffset = { yaw:0, pitch:0 };
+    this.inertia = { yawVelocity:0, ageSec:0 };
+    this.pointer = {
+      active:false,
+      id:null,
+      startX:0,
+      startY:0,
+      x:0,
+      y:0,
+      moved:0,
+      dragStarted:false,
+      velocityX:0,
+      lastTime:0,
+      type:''
+    };
     this.ignoreMouseUntil = 0;
     this.gyro = {
       supported:typeof window.DeviceOrientationEvent !== 'undefined',
@@ -97,26 +116,50 @@
     this.bound.keyUp = function (event) { self.keys[event.code] = false; };
     this.bound.pointerDown = function (event) {
       if (!self.isPlaying()) return;
+      if (event.target && event.target.closest && event.target.closest('button,.overlay')) return;
       if (event.target !== self.surface) return;
       event.preventDefault();
+      const now = event.timeStamp == null ? performance.now() : Number(event.timeStamp);
       self.pointer.active = true;
       self.pointer.id = event.pointerId;
+      self.pointer.startX = event.clientX;
+      self.pointer.startY = event.clientY;
       self.pointer.x = event.clientX;
       self.pointer.y = event.clientY;
       self.pointer.moved = 0;
+      self.pointer.dragStarted = false;
+      self.pointer.velocityX = 0;
+      self.pointer.lastTime = isFinite(now) ? now : performance.now();
       self.pointer.type = event.pointerType || 'mouse';
+      self.inertia.yawVelocity = 0;
+      self.inertia.ageSec = 0;
       if (self.surface.setPointerCapture) self.surface.setPointerCapture(event.pointerId);
     };
     this.bound.pointerMove = function (event) {
       if (!self.isPlaying()) return;
       if (self.pointer.active && event.pointerId === self.pointer.id) {
         event.preventDefault();
-        const dx = event.clientX - self.pointer.x;
-        const dy = event.clientY - self.pointer.y;
-        self.applyPointerDelta(dx, dy);
+        const totalX = event.clientX - self.pointer.startX;
+        const totalY = event.clientY - self.pointer.startY;
+        self.pointer.moved = Math.hypot(totalX, totalY);
+        const nowValue = event.timeStamp == null ? performance.now() : Number(event.timeStamp);
+        const now = isFinite(nowValue) ? nowValue : performance.now();
+        let dx = event.clientX - self.pointer.x;
+        let dy = event.clientY - self.pointer.y;
+        const velocityDx = dx;
+        const elapsed = Math.max(1, now - self.pointer.lastTime);
+        if (!self.pointer.dragStarted && self.pointer.moved >= DRAG_THRESHOLD_PX) {
+          self.pointer.dragStarted = true;
+          dx = totalX;
+          dy = totalY;
+        }
+        if (self.pointer.dragStarted) {
+          self.applyPointerDelta(dx, dy);
+          self.pointer.velocityX = velocityDx / elapsed * 1000;
+        }
         self.pointer.x = event.clientX;
         self.pointer.y = event.clientY;
-        self.pointer.moved += Math.abs(dx) + Math.abs(dy);
+        self.pointer.lastTime = now;
         return;
       }
       if ((event.pointerType || 'mouse') === 'mouse' && event.target === self.surface &&
@@ -127,8 +170,17 @@
     this.bound.pointerUp = function (event) {
       if (!self.pointer.active || event.pointerId !== self.pointer.id) return;
       event.preventDefault();
-      const wasTap = self.pointer.moved < 8;
+      const wasTap = !self.pointer.dragStarted && self.pointer.moved < DRAG_THRESHOLD_PX;
       const wasMouse = self.pointer.type === 'mouse';
+      const nowValue = event.timeStamp == null ? performance.now() : Number(event.timeStamp);
+      const now = isFinite(nowValue) ? nowValue : performance.now();
+      const recentVelocity = now - self.pointer.lastTime <= 100 ? self.pointer.velocityX : 0;
+      if (self.pointer.dragStarted && self.gyro.enabled && self.gyro.calibrated &&
+          Math.abs(recentVelocity) >= FLICK_THRESHOLD_PX_PER_SEC) {
+        const width = Math.max(1, window.innerWidth);
+        self.inertia.yawVelocity = clamp(-recentVelocity / width * 180, -FLICK_MAX_DEG_PER_SEC, FLICK_MAX_DEG_PER_SEC);
+        self.inertia.ageSec = 0;
+      }
       self.pointer.active = false;
       self.pointer.id = null;
       self.ignoreMouseUntil = performance.now() + 80;
@@ -144,9 +196,19 @@
   };
 
   GhostLensInput.prototype.applyPointerDelta = function (dx, dy) {
-    if (this.gyro.enabled && this.gyro.calibrated) return;
     const width = Math.max(1, window.innerWidth);
     const height = Math.max(1, window.innerHeight);
+    if (this.gyro.enabled && this.gyro.calibrated) {
+      const yawDelta = -dx / width * 180;
+      const pitchDelta = -dy / height * 120;
+      const gyroPose = this.gyroPose() || { yaw:0, pitch:0 };
+      this.dragOffset.yaw = shortestDegrees(this.dragOffset.yaw + yawDelta);
+      const combinedPitch = clamp(gyroPose.pitch + this.dragOffset.pitch + pitchDelta, -60, 60);
+      this.dragOffset.pitch = combinedPitch - gyroPose.pitch;
+      this.pose.yaw = shortestDegrees(this.pose.yaw + yawDelta);
+      this.pose.pitch = combinedPitch;
+      return;
+    }
     this.targetPose.yaw = shortestDegrees(this.targetPose.yaw - dx / width * 180);
     this.targetPose.pitch = clamp(this.targetPose.pitch - dy / height * 120, -60, 60);
     this.pose.yaw = this.targetPose.yaw;
@@ -189,6 +251,7 @@
 
   GhostLensInput.prototype.calibrate = function () {
     if (!this.gyro.enabled || !this.gyro.quaternion) return false;
+    this.resetDragOffset();
     const neutral = clone(this.gyro.quaternion);
     const normal = rotateVector(neutral, { x:0, y:0, z:1 });
     const top = rotateVector(neutral, { x:0, y:1, z:0 });
@@ -201,8 +264,8 @@
     this.gyro.rawYaw = 0;
     this.gyro.rawPitch = 0;
     this.gyro.calibrated = true;
-    this.pose.yaw = this.targetPose.yaw;
-    this.pose.pitch = this.targetPose.pitch;
+    this.pose.yaw = this.targetPose.yaw = 0;
+    this.pose.pitch = this.targetPose.pitch = 0;
     return true;
   };
 
@@ -229,8 +292,18 @@
     }
     const gyroPose = this.gyroPose();
     if (gyroPose) {
-      this.targetPose.yaw = gyroPose.yaw;
-      this.targetPose.pitch = gyroPose.pitch;
+      if (this.inertia.yawVelocity) {
+        const yawDelta = this.inertia.yawVelocity * dt;
+        this.dragOffset.yaw = shortestDegrees(this.dragOffset.yaw + yawDelta);
+        this.pose.yaw = shortestDegrees(this.pose.yaw + yawDelta);
+        this.inertia.ageSec += dt;
+        this.inertia.yawVelocity *= Math.exp(-dt / INERTIA_TIME_CONSTANT_SEC);
+        if (this.inertia.ageSec + 1e-6 >= INERTIA_MAX_SEC || Math.abs(this.inertia.yawVelocity) < 1) {
+          this.inertia.yawVelocity = 0;
+        }
+      }
+      this.targetPose.yaw = shortestDegrees(gyroPose.yaw + this.dragOffset.yaw);
+      this.targetPose.pitch = clamp(gyroPose.pitch + this.dragOffset.pitch, -60, 60);
       const ease = 1 - Math.exp(-dt * 12);
       this.pose.yaw = shortestDegrees(this.pose.yaw + shortestDegrees(this.targetPose.yaw - this.pose.yaw) * ease);
       this.pose.pitch += (this.targetPose.pitch - this.pose.pitch) * ease;
@@ -241,7 +314,15 @@
     return { yaw:this.pose.yaw, pitch:this.pose.pitch };
   };
 
+  GhostLensInput.prototype.resetDragOffset = function () {
+    this.dragOffset.yaw = 0;
+    this.dragOffset.pitch = 0;
+    this.inertia.yawVelocity = 0;
+    this.inertia.ageSec = 0;
+  };
+
   GhostLensInput.prototype.setPose = function (yaw, pitch) {
+    this.resetDragOffset();
     this.pose.yaw = this.targetPose.yaw = shortestDegrees(Number(yaw) || 0);
     this.pose.pitch = this.targetPose.pitch = clamp(Number(pitch) || 0, -60, 60);
   };
@@ -258,6 +339,8 @@
       gamma:this.gyro.gamma,
       rawYaw:this.gyro.rawYaw,
       rawPitch:this.gyro.rawPitch,
+      dragOffset:{ yaw:this.dragOffset.yaw, pitch:this.dragOffset.pitch },
+      inertia:{ yawVelocity:this.inertia.yawVelocity, ageSec:this.inertia.ageSec },
       quaternion:clone(this.gyro.quaternion),
       neutralQuaternion:clone(this.gyro.neutralQuaternion)
     };
@@ -268,7 +351,13 @@
     multiply:multiply,
     inverse:inverse,
     rotateVector:rotateVector,
-    shortestDegrees:shortestDegrees
+    shortestDegrees:shortestDegrees,
+    constants:{
+      dragThresholdPx:DRAG_THRESHOLD_PX,
+      flickThresholdPxPerSec:FLICK_THRESHOLD_PX_PER_SEC,
+      inertiaTimeConstantSec:INERTIA_TIME_CONSTANT_SEC,
+      inertiaMaxSec:INERTIA_MAX_SEC
+    }
   };
   window.GhostLensInput = GhostLensInput;
 })();

@@ -213,6 +213,7 @@ h1 span { color:#e1e5dc; }
 
 .message { position:absolute; z-index:14; left:50%; top:22%; transform:translate(-50%,-50%); font:700 clamp(18px,5vw,34px) "Courier New",monospace; letter-spacing:.18em; text-align:center; opacity:0; text-shadow:0 2px 10px #000; pointer-events:none; }
 .message.show { animation:message-pop 1.05s ease-out; }
+.message.hint.show { font-size:clamp(12px,3.4vw,20px); letter-spacing:.08em; animation-duration:2s; }
 .message.perfect { color:#edf8f1; }.message.good { color:#bce1d0; }.message.gold { color:#ffe48a; text-shadow:0 0 18px #d99b38; }
 @keyframes message-pop { 0%{opacity:0;transform:translate(-50%,-30%) scale(.7)} 15%{opacity:1;transform:translate(-50%,-50%) scale(1.08)} 70%{opacity:1} 100%{opacity:0;transform:translate(-50%,-75%) scale(.96)} }
 .polaroid-tray { position:absolute; z-index:16; left:50%; bottom:-260px; width:180px; height:220px; padding:10px 10px 34px; background:#e7e1cf; box-shadow:0 8px 25px #000; transform:translateX(-50%) rotate(-2deg); }

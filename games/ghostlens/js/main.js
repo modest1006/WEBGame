@@ -30,6 +30,7 @@
   let audio=null;
   let input=null;
   let slowMotionMs=0;
+  let gyroHintShown=false;
   let debugVisible=params.get('debug')==='1';
   let lastTime=performance.now();
 
@@ -95,7 +96,10 @@
         clearInterval(timer);
         input.calibrate();
         beginPlay();
-        renderer.showMessage('NEUTRAL SET','');
+        if(!gyroHintShown){
+          gyroHintShown=true;
+          renderer.showMessage('スワイプでも見回せます','hint');
+        }else renderer.showMessage('NEUTRAL SET','');
       }else if(attempts>=16){
         clearInterval(timer);
         beginPlay();
