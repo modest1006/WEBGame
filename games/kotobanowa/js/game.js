@@ -124,10 +124,10 @@
     state.lastAction = state.now; state.hintWord = null;
     if (state.mode === "quiz") {
       if (state.neighbors.indexOf(id) >= 0 && state.choices.indexOf(id) < 0) {
-        K.audio.play("tap"); K.audio.speak(K.WORDS[id].label); return true;
+        K.audio.play("tap"); return true;
       }
       if (state.choices.indexOf(id) < 0 || state.disabledChoices.indexOf(id) >= 0 || state.pendingNextAt !== null) { return false; }
-      K.audio.play("tap"); K.audio.speak(K.WORDS[id].label);
+      K.audio.play("tap");
       if (id === state.quizAnswer) {
         state.center = id; state.score += 1; state.rounds += 1;
         state.message = "やったね！"; state.pendingNextAt = state.now + 1800;
@@ -139,7 +139,7 @@
       K.renderer.shakeChoice(id); return false;
     }
     if (state.neighbors.indexOf(id) < 0 && !fromDebug) { return false; }
-    K.audio.play("tap"); K.audio.speak(K.WORDS[id].label);
+    K.audio.play("tap");
     state.transitioning = true; state.moveTo = id; state.moveAt = state.now + 400;
     K.renderer.flyToCenter(id, function () {});
     return true;
@@ -158,7 +158,7 @@
       var arrived = state.moveTo;
       state.moveAt = null; state.moveTo = null; setCenter(arrived); state.transitioning = false;
       document.getElementById("app").classList.remove("spin-world");
-      K.audio.play("arrive"); K.audio.speak(K.WORDS[arrived].label);
+      K.audio.play("arrive");
       if (state.mode === "quest" && arrived === state.target) {
         state.score += 1; state.rounds += 1; state.message = "やったね！";
         state.pendingNextAt = state.now + 2000; K.audio.play("fanfare");

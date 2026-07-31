@@ -48,24 +48,11 @@
     }
   }
 
-  function speak(text) {
-    if (muted || !("speechSynthesis" in window)) { return; }
-    try {
-      var u = new SpeechSynthesisUtterance(text);
-      u.lang = "ja-JP"; u.rate = 0.9; u.pitch = 1.08; u.volume = 0.9;
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.resume();
-      window.speechSynthesis.speak(u);
-    } catch (ignore) {}
-  }
-
   K.audio = {
     unlock: unlock,
     play: play,
-    speak: speak,
     toggle: function () {
       muted = !muted;
-      if (muted && "speechSynthesis" in window) { try { window.speechSynthesis.cancel(); } catch (ignore) {} }
       return muted;
     },
     isMuted: function () { return muted; }

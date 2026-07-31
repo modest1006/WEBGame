@@ -398,10 +398,10 @@
     }
     if (button.id === "random-button") { K.audio.play("tap"); K.game.randomJump(); return; }
     if (button.id === "target-card" && K.game.state.target) {
-      K.audio.play("tap"); K.audio.speak(K.WORDS[K.game.state.target].label); return;
+      K.audio.play("tap"); return;
     }
     if (button.id === "center-word" && K.game.state.center) {
-      K.audio.play("tap"); K.audio.speak(K.WORDS[K.game.state.center].label);
+      K.audio.play("tap");
       return;
     }
     if (button.dataset.word) { K.game.tapWord(button.dataset.word, false); }
