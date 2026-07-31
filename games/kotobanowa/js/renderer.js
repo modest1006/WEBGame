@@ -4,6 +4,7 @@
   var canvas, ctx, width = 0, height = 0, dpr = 1, lastTime = 0;
   var particles = [], decorations = [], refs = {};
   var nodeMap = {}, angleById = {}, currentLayoutKey = "", pendingEdge = null, treeBusy = false;
+  var lastViewportKey = "", resizeQueued = false;
 
   function cacheRefs() {
     ["app", "title-screen", "game-screen", "word-stage", "neighbors", "center-word", "links",
@@ -24,6 +25,7 @@
   function wordContent(element, word, question) {
     element.querySelector(".word-emoji").textContent = question ? "❓" : word.emoji;
     element.querySelector(".word-label").textContent = question ? "だれかな？" : word.label;
+    element.querySelector(".word-label").classList.toggle("long-label", !question && word.label.length >= 6);
   }
 
   function createNode(key) {
@@ -38,11 +40,51 @@
   function slotPosition(index, count) {
     var angle = -Math.PI / 2 + index * Math.PI * 2 / count;
     var lowLandscape = window.matchMedia && window.matchMedia("(max-height:650px) and (orientation:landscape)").matches;
-    var radiusY = lowLandscape ? 34 : 36;
+    var radiusX = 36, radiusY = 36, centerY = 50;
+    if (lowLandscape && refs["word-stage"]) {
+      var rect = refs["word-stage"].getBoundingClientRect();
+      var messageRect = refs.message.getBoundingClientRect();
+      var nodeDiameter = 72 * 1.01;
+      var nodeRadius = nodeDiameter / 2;
+      var centerRadius = 108 * 1.025 / 2;
+      var edgeGap = 4, pairGap = 2;
+      var topLimit = Math.max(0, messageRect.bottom - rect.top) + nodeRadius + edgeGap;
+      var bottomLimit = Math.min(window.innerHeight - rect.top, rect.height + 12) - nodeRadius - edgeGap;
+      var ringCenterY = (topLimit + bottomLimit) / 2;
+      var ringRadiusY = Math.max(0, (bottomLimit - topLimit) / 2);
+      var maxRadiusX = Math.max(0, rect.width / 2 - nodeRadius - edgeGap);
+      var ringRadiusX = Math.min(rect.width * 0.36, maxRadiusX);
+      var centerNeed = centerRadius + nodeRadius + edgeGap;
+      var pairNeed = nodeDiameter + pairGap;
+
+      function layoutFits(testRadiusX) {
+        var points = [];
+        for (var pIndex = 0; pIndex < count; pIndex++) {
+          var pAngle = -Math.PI / 2 + pIndex * Math.PI * 2 / count;
+          var px = Math.cos(pAngle) * testRadiusX;
+          var py = ringCenterY + Math.sin(pAngle) * ringRadiusY - rect.height / 2;
+          if (Math.sqrt(px * px + py * py) < centerNeed) { return false; }
+          points.push({ x: px, y: py });
+        }
+        for (var a = 0; a < points.length; a++) {
+          for (var b = a + 1; b < points.length; b++) {
+            if (Math.abs(points[a].x - points[b].x) < pairNeed &&
+                Math.abs(points[a].y - points[b].y) < pairNeed) { return false; }
+          }
+        }
+        return true;
+      }
+
+      while (ringRadiusX < maxRadiusX && !layoutFits(ringRadiusX)) { ringRadiusX += 0.5; }
+      ringRadiusX = Math.min(ringRadiusX, maxRadiusX);
+      radiusX = rect.width ? ringRadiusX / rect.width * 100 : 36;
+      radiusY = rect.height ? ringRadiusY / rect.height * 100 : 36;
+      centerY = rect.height ? ringCenterY / rect.height * 100 : 50;
+    }
     return {
       angle: angle,
-      x: 50 + Math.cos(angle) * 36,
-      y: 50 + Math.sin(angle) * radiusY
+      x: 50 + Math.cos(angle) * radiusX,
+      y: centerY + Math.sin(angle) * radiusY
     };
   }
 
@@ -122,6 +164,7 @@
     renderLinks(assignments);
     refs.links.classList.remove("links-fading");
     currentLayoutKey = layoutKey();
+    lastViewportKey = window.innerWidth + "x" + window.innerHeight;
     treeBusy = false;
   }
 
@@ -207,7 +250,8 @@
     if (reducedMotion()) {
       retained.forEach(function (id) { nodeMap[id].classList.remove("tree-moving"); });
       refs.links.classList.remove("links-fading");
-      currentLayoutKey = layoutKey(); pendingEdge = null; treeBusy = false; return;
+      currentLayoutKey = layoutKey(); pendingEdge = null; treeBusy = false;
+      lastViewportKey = window.innerWidth + "x" + window.innerHeight; return;
     }
 
     retained.forEach(function (id) {
@@ -246,6 +290,62 @@
     requestAnimationFrame(function () { requestAnimationFrame(release); });
     setTimeout(release, 32);
     currentLayoutKey = layoutKey(); pendingEdge = null;
+    lastViewportKey = window.innerWidth + "x" + window.innerHeight;
+  }
+
+  function relayoutNow() {
+    var s = K.game.state;
+    if (!refs.app || s.screen !== "game" || !s.mode || !s.neighbors.length) {
+      lastViewportKey = window.innerWidth + "x" + window.innerHeight; return;
+    }
+    refs["word-stage"].classList.toggle("degree-high", s.neighbors.length >= 7);
+    refs["word-stage"].classList.toggle("degree-eight", s.neighbors.length >= 8);
+    var assignments = {}, used = [];
+    s.neighbors.forEach(function (id, index) {
+      var node = nodeMap[id], slot = node ? Number(node.dataset.slot) : index;
+      if (!Number.isFinite(slot) || slot < 0 || slot >= s.neighbors.length || used.indexOf(slot) >= 0) {
+        slot = index;
+        while (used.indexOf(slot) >= 0) { slot = (slot + 1) % s.neighbors.length; }
+      }
+      assignments[id] = slot; used.push(slot);
+    });
+    var centerKey = s.mode === "quiz" ? "__quiz__" : s.center;
+    if (nodeMap[centerKey]) {
+      nodeMap[centerKey].style.removeProperty("transition");
+      nodeMap[centerKey].style.removeProperty("transform");
+      nodeMap[centerKey].style.removeProperty("opacity");
+      setNodeRole(nodeMap[centerKey], centerKey, "center", 0, s.neighbors.length, false, false);
+    }
+    s.neighbors.forEach(function (id) {
+      if (!nodeMap[id]) { return; }
+      nodeMap[id].style.removeProperty("transition");
+      nodeMap[id].style.removeProperty("transform");
+      nodeMap[id].style.removeProperty("opacity");
+      setNodeRole(nodeMap[id], id, "neighbor", assignments[id], s.neighbors.length, false, false);
+      angleById[id] = slotPosition(assignments[id], s.neighbors.length).angle;
+    });
+    renderLinks(assignments);
+    refs.links.classList.remove("links-fading");
+    if (pendingEdge) {
+      pendingEdge.rects = {}; pendingEdge.oldAngles = {};
+      Object.keys(nodeMap).forEach(function (key) {
+        if (key !== "__quiz__") { pendingEdge.rects[key] = nodeMap[key].getBoundingClientRect(); }
+      });
+      Object.keys(angleById).forEach(function (key) { pendingEdge.oldAngles[key] = angleById[key]; });
+    } else {
+      treeBusy = false;
+    }
+    lastViewportKey = window.innerWidth + "x" + window.innerHeight;
+  }
+
+  function queueRelayout() {
+    if (resizeQueued) { return; }
+    resizeQueued = true;
+    requestAnimationFrame(function () {
+      resizeQueued = false;
+      resize();
+      relayoutNow();
+    });
   }
 
   function updateStableNodes() {
@@ -264,6 +364,7 @@
     s.choices.forEach(function (id) {
       var word = K.WORDS[id], b = document.createElement("button");
       b.className = "choice-button"; b.dataset.word = id;
+      if (word.label.length >= 6) { b.classList.add("long-label"); }
       if (s.disabledChoices.indexOf(id) >= 0) { b.classList.add("disabled"); b.disabled = true; }
       b.innerHTML = '<span>' + word.emoji + '</span><small>' + word.label + '</small>';
       refs["quiz-choices"].appendChild(b);
@@ -284,6 +385,8 @@
     refs["target-card"].classList.toggle("hidden", s.mode !== "quest");
     refs["quiz-choices"].classList.toggle("hidden", s.mode !== "quiz");
     refs["word-stage"].classList.toggle("quiz-stage", s.mode === "quiz");
+    refs["word-stage"].classList.toggle("degree-high", s.neighbors.length >= 7);
+    refs["word-stage"].classList.toggle("degree-eight", s.neighbors.length >= 8);
     refs.message.textContent = s.message;
     refs.message.classList.toggle("has-message", !!s.message);
     if (s.target) {
@@ -296,6 +399,8 @@
       animateTree(pendingEdge);
     } else if (nextKey !== currentLayoutKey) {
       pendingEdge = null; fullRebuild();
+    } else if (lastViewportKey !== window.innerWidth + "x" + window.innerHeight) {
+      relayoutNow();
     } else {
       updateStableNodes();
     }
@@ -401,7 +506,10 @@
 
   function init() {
     canvas = document.getElementById("effects"); ctx = canvas.getContext("2d");
-    cacheRefs(); resize(); renderAll(); requestAnimationFrame(frame);
+    cacheRefs(); resize(); renderAll();
+    window.addEventListener("resize", queueRelayout);
+    window.addEventListener("orientationchange", queueRelayout);
+    requestAnimationFrame(frame);
   }
 
   K.renderer = {
@@ -413,6 +521,7 @@
     draw: draw,
     getNode: function (id) { return nodeMap[id] || null; },
     isBusy: function () { return treeBusy; },
+    relayoutNow: relayoutNow,
     renderOnce: function (dt) { K.game.update(dt); draw(Math.max(0, dt) / 1000); renderAll(); }
   };
 }());
