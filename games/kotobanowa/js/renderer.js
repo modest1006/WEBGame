@@ -663,7 +663,10 @@
 
   function frame(time) {
     var dt = Math.min(0.05, Math.max(0, (time - lastTime) / 1000 || 0));
-    lastTime = time; K.game.update(dt * 1000); draw(dt); updateDebug(); requestAnimationFrame(frame);
+    lastTime = time;
+    K.game.update(dt * 1000);
+    if (K.input && K.input.updatePhysics) { K.input.updatePhysics(dt * 1000); }
+    draw(dt); updateDebug(); requestAnimationFrame(frame);
   }
 
   function updateDebug() {
@@ -692,10 +695,16 @@
     isBusy: function () { return treeBusy; },
     beginDragVisual: beginDragVisual,
     updateDragVisual: updateDragVisual,
+    updateReturningLink: function (id, element) { updateLineEndpoint(id, element, true); },
     endDragVisual: endDragVisual,
     setDragHot: setDragHot,
     continueDragToCenter: continueDragToCenter,
     relayoutNow: relayoutNow,
-    renderOnce: function (dt) { K.game.update(dt); draw(Math.max(0, dt) / 1000); renderAll(); }
+    renderOnce: function (dt) {
+      K.game.update(dt);
+      if (K.input && K.input.updatePhysics) { K.input.updatePhysics(dt); }
+      draw(Math.max(0, dt) / 1000);
+      renderAll();
+    }
   };
 }());
