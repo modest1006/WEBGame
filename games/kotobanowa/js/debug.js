@@ -61,6 +61,7 @@
     setMode: K.game.setMode,
     tapWord: function (id) { return K.game.tapWord(id, false); },
     dragWord: dragWord,
+    iconDataURL: function (name) { return K.icons.dataURL(name); },
     validateGraph: K.game.validateGraph,
     findPath: K.game.findPath
   };

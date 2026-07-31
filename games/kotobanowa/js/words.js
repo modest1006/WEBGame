@@ -53,7 +53,7 @@
     "ロケット": ["ロケット", "🚀", ["つき", "ほし", "ひこうき", "しんかんせん", "ヘリコプター", "ユーフォー"]],
     "しんごう": ["しんごう", "🚦", ["くるま", "バス", "タクシー", "きゅうきゅうしゃ", "さんぽ", "バイク", "しろバイ"]],
     "バイク": ["バイク", "🏍️", ["じてんしゃ", "パトカー", "しんごう", "しろバイ"]],
-    "しろバイ": ["しろバイ", "👮🏍️", ["バイク", "パトカー", "しんごう"]],
+    "しろバイ": ["しろバイ", { icon: "shirobai", fallback: "🏍️" }, ["バイク", "パトカー", "しんごう"]],
     "レーシングカー": ["レーシングカー", "🏎️", ["くるま", "しんかんせん", "バイク"]],
     "トラクター": ["トラクター", "🚜", ["トラック", "にんじん", "やま", "ダンプカー"]],
     "クレーンしゃ": ["クレーンしゃ", "🏗️", ["トラック", "ダンプカー", "おうち"]],
@@ -69,7 +69,14 @@
 
   var words = {};
   Object.keys(source).forEach(function (id) {
-    words[id] = { id: id, label: source[id][0], emoji: source[id][1], neighbors: [] };
+    var visual = source[id][1];
+    words[id] = {
+      id: id,
+      label: source[id][0],
+      emoji: typeof visual === "string" ? visual : visual.fallback,
+      icon: typeof visual === "object" ? visual.icon : null,
+      neighbors: []
+    };
   });
   Object.keys(source).forEach(function (id) {
     source[id][2].forEach(function (other) {

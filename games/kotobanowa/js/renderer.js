@@ -23,11 +23,33 @@
     return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }
 
+  function multiEmoji(word) {
+    return !word.icon &&
+      Array.from(word.emoji).filter(function (char) { return char !== "\uFE0F"; }).length > 1;
+  }
+
+  function renderVisual(slot, word, question) {
+    slot.textContent = "";
+    slot.classList.remove("multi-emoji", "icon-visual");
+    if (question) {
+      slot.textContent = "❓";
+      return;
+    }
+    if (word.icon && K.icons) {
+      var image = K.icons.createImage(word.icon);
+      if (image) {
+        slot.classList.add("icon-visual");
+        slot.appendChild(image);
+        return;
+      }
+    }
+    slot.textContent = word.emoji;
+    slot.classList.toggle("multi-emoji", multiEmoji(word));
+  }
+
   function wordContent(element, word, question) {
     var emoji = element.querySelector(".word-emoji");
-    emoji.textContent = question ? "❓" : word.emoji;
-    emoji.classList.toggle("multi-emoji", !question &&
-      Array.from(word.emoji).filter(function (char) { return char !== "\uFE0F"; }).length > 1);
+    renderVisual(emoji, word, question);
     element.querySelector(".word-label").textContent = question ? "だれかな？" : word.label;
     element.querySelector(".word-label").classList.toggle("long-label", !question && word.label.length >= 6);
   }
@@ -480,9 +502,12 @@
       b.className = "choice-button"; b.dataset.word = id;
       if (word.label.length >= 6) { b.classList.add("long-label"); }
       if (s.disabledChoices.indexOf(id) >= 0) { b.classList.add("disabled"); b.disabled = true; }
-      var multiEmoji = Array.from(word.emoji).filter(function (char) { return char !== "\uFE0F"; }).length > 1;
-      b.innerHTML = '<span class="' + (multiEmoji ? "multi-emoji" : "") + '">' +
-        word.emoji + '</span><small>' + word.label + '</small>';
+      var visual = document.createElement("span");
+      visual.className = "choice-visual";
+      renderVisual(visual, word, false);
+      var label = document.createElement("small");
+      label.textContent = word.label;
+      b.appendChild(visual); b.appendChild(label);
       refs["quiz-choices"].appendChild(b);
     });
   }
@@ -506,7 +531,7 @@
     refs.message.textContent = s.message;
     refs.message.classList.toggle("has-message", !!s.message);
     if (s.target) {
-      refs["target-emoji"].textContent = K.WORDS[s.target].emoji;
+      renderVisual(refs["target-emoji"], K.WORDS[s.target], false);
       refs["target-label"].textContent = K.WORDS[s.target].label;
     }
 
@@ -581,14 +606,17 @@
     }
   }
 
-  function confetti(emoji) {
+  function confetti(word) {
+    var emoji = typeof word === "string" ? word : word.emoji;
+    var icon = typeof word === "object" ? word.icon : null;
     for (var i = 0; i < 70; i++) {
       particles.push({ x: width * (0.25 + K.game.random() * 0.5), y: height * 0.35,
         vx: (K.game.random() - 0.5) * 360, vy: -100 - K.game.random() * 280,
         life: 2.5 + K.game.random(), age: 0, rot: K.game.random() * 6.28,
         spin: (K.game.random() - 0.5) * 9, size: 7 + K.game.random() * 12,
         color: ["#ff7998", "#ffd65a", "#6edbc1", "#7ea7ff", "#c58cff"][i % 5],
-        emoji: i % 11 === 0 ? emoji : null });
+        emoji: i % 11 === 0 ? emoji : null,
+        icon: i % 11 === 0 ? icon : null });
     }
   }
 
@@ -616,7 +644,13 @@
       p.vy += 420 * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.spin * dt;
       ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
       ctx.globalAlpha = Math.min(1, (p.life - p.age) * 2);
-      if (p.emoji) { ctx.font = (p.size * 2) + "px sans-serif"; ctx.fillText(p.emoji, -p.size, p.size); }
+      if (p.icon && K.icons) {
+        var iconImage = K.icons.getImage(p.icon);
+        if (iconImage && iconImage.complete) { ctx.drawImage(iconImage, -p.size, -p.size, p.size * 2, p.size * 2); }
+        else { ctx.font = (p.size * 2) + "px sans-serif"; ctx.fillText(p.emoji || "🏍️", -p.size, p.size); }
+      } else if (p.emoji) {
+        ctx.font = (p.size * 2) + "px sans-serif"; ctx.fillText(p.emoji, -p.size, p.size);
+      }
       else {
         ctx.fillStyle = p.color;
         if (Math.floor(p.age * 8) % 2) { ctx.fillRect(-p.size, -p.size / 3, p.size * 2, p.size * 0.66); }

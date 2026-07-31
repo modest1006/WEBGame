@@ -1,6 +1,7 @@
 (function () {
   "use strict";
   function start() {
+    window.Kotobanowa.icons.init();
     window.Kotobanowa.renderer.init();
     window.Kotobanowa.input.init();
     if (new URLSearchParams(location.search).get("debug") === "1") {

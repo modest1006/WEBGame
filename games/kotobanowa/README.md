@@ -25,6 +25,7 @@ URLに `?seed=123` を付けると乱数を固定し、`?debug=1` を付ける�
 - `setMode(mode)` — `walk` / `quest` / `quiz` へ直接切替
 - `tapWord(id)` — 表示中の隣接語または選択肢をタップ
 - `dragWord(id, toX, toY, {release, vx, vy})` — 実際のpointerイベント経路で、語を画面座標へドラッグ／リリース（`vx`, `vy`はフリック検証用px/s）
+- `iconDataURL(name)` — プロシージャルアイコンを256px PNG dataURLで取得（白バイは`shirobai`）
 - `validateGraph()` — グラフの対称性・連結性・クイズ出題可能語数を検証
 - `findPath(from, to)` — BFSによる最短経路
 

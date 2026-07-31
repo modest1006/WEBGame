@@ -132,7 +132,7 @@
         state.center = id; state.score += 1; state.rounds += 1;
         state.message = "やったね！"; state.pendingNextAt = state.now + 1800;
         K.audio.play("fanfare");
-        K.renderer.confetti(K.WORDS[id].emoji); K.renderer.renderAll();
+        K.renderer.confetti(K.WORDS[id]); K.renderer.renderAll();
         return true;
       }
       state.disabledChoices.push(id); K.audio.play("wrong"); K.renderer.renderAll();
@@ -162,7 +162,7 @@
       if (state.mode === "quest" && arrived === state.target) {
         state.score += 1; state.rounds += 1; state.message = "やったね！";
         state.pendingNextAt = state.now + 2000; K.audio.play("fanfare");
-        K.renderer.confetti(K.WORDS[arrived].emoji);
+        K.renderer.confetti(K.WORDS[arrived]);
       }
       K.renderer.renderAll();
     }
