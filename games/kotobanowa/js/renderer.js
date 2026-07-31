@@ -221,6 +221,14 @@
     var assignments = assignMinimalSlots(s.neighbors, edge);
     var retained = [], fresh = [];
 
+    if (edge.draggedId && nodeMap[edge.draggedId]) {
+      edge.rects[edge.draggedId] = nodeMap[edge.draggedId].getBoundingClientRect();
+      nodeMap[edge.draggedId].style.removeProperty("translate");
+      nodeMap[edge.draggedId].style.removeProperty("transition");
+      delete nodeMap[edge.draggedId].dataset.dragX;
+      delete nodeMap[edge.draggedId].dataset.dragY;
+    }
+
     Object.keys(nodeMap).forEach(function (key) {
       if (desired.indexOf(key) < 0) { beginExit(key, nodeMap[key]); }
     });
@@ -340,6 +348,7 @@
 
   function queueRelayout() {
     if (resizeQueued) { return; }
+    if (K.input && K.input.cancelDrag) { K.input.cancelDrag(true); }
     resizeQueued = true;
     requestAnimationFrame(function () {
       resizeQueued = false;
@@ -424,6 +433,25 @@
     treeBusy = true;
     refs.links.classList.add("links-fading");
     if (nodeMap[id] && !reducedMotion()) { nodeMap[id].classList.add("squash"); }
+  }
+
+  function continueDragToCenter(id, element) {
+    if (!pendingEdge || pendingEdge.tapped !== id || !element || !element.isConnected) { return false; }
+    var center = nodeMap[pendingEdge.oldCenter];
+    if (!center) { return false; }
+    var from = element.getBoundingClientRect();
+    var target = center.getBoundingClientRect();
+    var currentX = Number(element.dataset.dragX) || 0;
+    var currentY = Number(element.dataset.dragY) || 0;
+    var dx = target.left + target.width / 2 - (from.left + from.width / 2);
+    var dy = target.top + target.height / 2 - (from.top + from.height / 2);
+    pendingEdge.draggedId = id;
+    element.classList.remove("dragging", "squash");
+    element.classList.add("drag-flight");
+    element.style.transition = reducedMotion() ? "none" :
+      "translate 390ms cubic-bezier(.2,.85,.3,1), filter 180ms ease";
+    element.style.translate = (currentX + dx) + "px " + (currentY + dy) + "px";
+    return true;
   }
 
   function shakeChoice(id) {
@@ -521,6 +549,7 @@
     draw: draw,
     getNode: function (id) { return nodeMap[id] || null; },
     isBusy: function () { return treeBusy; },
+    continueDragToCenter: continueDragToCenter,
     relayoutNow: relayoutNow,
     renderOnce: function (dt) { K.game.update(dt); draw(Math.max(0, dt) / 1000); renderAll(); }
   };

@@ -33,6 +33,10 @@
     unlock();
     if (kind === "tap") {
       tone(330, 0, 0.12, "sine", 0.07); tone(440, 0.05, 0.10, "sine", 0.045);
+    } else if (kind === "grab") {
+      tone(390, 0, 0.09, "sine", 0.045); tone(520, 0.035, 0.09, "sine", 0.035);
+    } else if (kind === "return") {
+      tone(360, 0, 0.08, "sine", 0.025); tone(300, 0.055, 0.11, "triangle", 0.018);
     } else if (kind === "arrive") {
       tone(660, 0, 0.16, "sine", 0.055); tone(880, 0.08, 0.2, "sine", 0.055);
     } else if (kind === "wrong") {
