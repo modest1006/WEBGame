@@ -408,6 +408,7 @@
   }
 
   function init() {
+    function preventGesture(event) { event.preventDefault(); }
     document.addEventListener("pointerdown", function (event) {
       if (active) { event.preventDefault(); return; }
       var info = draggableFor(event.target);
@@ -445,6 +446,9 @@
     window.addEventListener("resize", function () { cancelDrag(true); });
     window.addEventListener("orientationchange", function () { cancelDrag(true); });
     document.addEventListener("touchmove", function (event) { event.preventDefault(); }, { passive: false });
+    document.addEventListener("gesturestart", preventGesture, { passive: false });
+    document.addEventListener("gesturechange", preventGesture, { passive: false });
+    document.addEventListener("gestureend", preventGesture, { passive: false });
   }
 
   K.input = {

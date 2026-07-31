@@ -1,7 +1,7 @@
 :root{--ink:#4f5875;--cream:#fffdf7;font-family:"Hiragino Maru Gothic ProN","Yu Gothic","Meiryo",system-ui,sans-serif}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{width:100%;height:100%;margin:0;overflow:hidden;touch-action:none;user-select:none}
-body{color:var(--ink)}button{color:inherit;font:inherit;border:0;cursor:pointer;touch-action:none}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+body{color:var(--ink)}button{color:inherit;font:inherit;border:0;cursor:pointer;touch-action:none;-webkit-user-select:none;user-select:none}
 #effects{position:fixed;inset:0;z-index:2;pointer-events:none}
 #app{position:fixed;inset:0;overflow:hidden;z-index:1;transition:background 600ms ease,filter 400ms ease}
 .theme-title,.theme-walk{background:linear-gradient(155deg,#e7faff 0%,#b9e9ff 55%,#fef7c7 100%)}

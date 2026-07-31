@@ -54,6 +54,7 @@
       var u = new SpeechSynthesisUtterance(text);
       u.lang = "ja-JP"; u.rate = 0.9; u.pitch = 1.08; u.volume = 0.9;
       window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
       window.speechSynthesis.speak(u);
     } catch (ignore) {}
   }
