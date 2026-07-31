@@ -80,6 +80,7 @@ games/<game-name>/
 - `touch-action: none` や `preventDefault` でスクロール/ダブルタップズームの誤爆を防ぐ
 - viewport メタタグ必須。モバイル縦画面レイアウトを `preview_resize`（mobile）で必ず確認する
 - **センタリング等の配置transformは必ずベーススタイルに書く。@keyframesの中だけに書かない**。`prefers-reduced-motion` 有効端末（Androidの「アニメーション削除」設定等）ではアニメが即終了してtransformがベース値に戻り、`translate(-50%,-50%)` がキーフレームにしかない要素は半サイズ右下へズレる（ことばのわのドロップリングで実発生、友人のNothing Phoneで発覚）。レビュー時は `animation:none` を全要素に注入して配置が崩れないか確認する
+- **演出後の「最終状態への復帰」はDOM測定+rAF/タイマー補正でなく、幾何（スロット座標等）から同期的に書き戻す**。測定ベースはtransition開始前の古いrectを拾い、reduced-motion端末で補正が効かず取り残される（ことばのわのリンク点線で実発生）。レビューにはreduced-motionエミュレート（matchMedia上書き＋全要素duration .01ms注入→操作直後に同期検査）を含める
 - **JSでpx確定するレイアウトは `resize`/`orientationchange` で再計算する**。配置をレイアウト時のviewportサイズから計算して固定すると、スマホ回転後に次の再描画契機まで崩れたまま残る（ことばのわで実発生）。レビュー時は「縦で描画→横にresize→タップせずに重なり/はみ出しスキャン」を両方向で行う
 
 ## ジャイロ操作（DeviceOrientation）
