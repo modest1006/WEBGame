@@ -24,7 +24,10 @@
   }
 
   function wordContent(element, word, question) {
-    element.querySelector(".word-emoji").textContent = question ? "❓" : word.emoji;
+    var emoji = element.querySelector(".word-emoji");
+    emoji.textContent = question ? "❓" : word.emoji;
+    emoji.classList.toggle("multi-emoji", !question &&
+      Array.from(word.emoji).filter(function (char) { return char !== "\uFE0F"; }).length > 1);
     element.querySelector(".word-label").textContent = question ? "だれかな？" : word.label;
     element.querySelector(".word-label").classList.toggle("long-label", !question && word.label.length >= 6);
   }
@@ -477,7 +480,9 @@
       b.className = "choice-button"; b.dataset.word = id;
       if (word.label.length >= 6) { b.classList.add("long-label"); }
       if (s.disabledChoices.indexOf(id) >= 0) { b.classList.add("disabled"); b.disabled = true; }
-      b.innerHTML = '<span>' + word.emoji + '</span><small>' + word.label + '</small>';
+      var multiEmoji = Array.from(word.emoji).filter(function (char) { return char !== "\uFE0F"; }).length > 1;
+      b.innerHTML = '<span class="' + (multiEmoji ? "multi-emoji" : "") + '">' +
+        word.emoji + '</span><small>' + word.label + '</small>';
       refs["quiz-choices"].appendChild(b);
     });
   }
