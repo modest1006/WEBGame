@@ -2,8 +2,9 @@
   "use strict";
   var K = window.Kotobanowa = window.Kotobanowa || {};
   var active = null;
-  var DRAG_DISTANCE = 10;
-  var TAP_TIME = 300;
+  var DRAG_DISTANCE = 22;
+  var SAFETY_DISTANCE = 30;
+  var SAFETY_PATH = 70;
   var FLICK_SPEED = 400;
   var FLICK_COS = Math.cos(35 * Math.PI / 180);
 
@@ -25,11 +26,14 @@
   }
 
   function setDragOffset(x, y) {
-    if (!active || !active.element) { return; }
+    if (!active || !active.element || !active.dragging) { return; }
     active.currentX = x; active.currentY = y;
     active.element.dataset.dragX = String(x);
     active.element.dataset.dragY = String(y);
     active.element.style.translate = x + "px " + y + "px";
+    if (K.renderer.updateDragVisual) {
+      K.renderer.updateDragVisual(active.id, active.element, active.hot);
+    }
   }
 
   function follow() {
@@ -47,10 +51,19 @@
     }
   }
 
-  function aimAt(x, y) {
+  function aimAt(x, y, magnet) {
     if (!active) { return; }
     active.targetX = x - active.startX;
     active.targetY = y - active.startY;
+    if (magnet) {
+      var target = centralTarget();
+      if (target) {
+        var nodeX = active.originX + active.targetX;
+        var nodeY = active.originY + active.targetY;
+        active.targetX += (target.x - nodeX) * 0.62;
+        active.targetY += (target.y - nodeY) * 0.62;
+      }
+    }
     if (reducedMotion()) {
       setDragOffset(active.targetX, active.targetY);
     } else if (!active.raf) {
@@ -77,14 +90,16 @@
   }
 
   function updateDropCue(x, y) {
+    if (!active || !active.dragging) { return false; }
     var center = document.querySelector(".center-node");
     var target = centralTarget();
     if (!center || !target) { return false; }
     var nodeX = active.originX + (x - active.startX);
     var nodeY = active.originY + (y - active.startY);
     var inside = Math.hypot(nodeX - target.x, nodeY - target.y) <= target.radius;
-    center.classList.add("drop-ready");
-    center.classList.toggle("drop-hot", inside);
+    if (inside && !active.hot) { K.audio.play("snap"); }
+    active.hot = inside;
+    if (K.renderer.setDragHot) { K.renderer.setDragHot(inside); }
     return inside;
   }
 
@@ -117,7 +132,7 @@
 
   function cleanElement(element) {
     if (!element) { return; }
-    element.classList.remove("dragging", "drag-returning");
+    element.classList.remove("tap-press", "dragging", "drag-returning", "drag-flight");
     element.style.removeProperty("translate");
     element.style.removeProperty("transition");
     delete element.dataset.dragX; delete element.dataset.dragY;
@@ -126,7 +141,14 @@
   function springBack(drag) {
     var element = drag.element;
     if (!element || !element.isConnected) { return; }
-    if (reducedMotion()) { cleanElement(element); return; }
+    if (reducedMotion()) {
+      cleanElement(element);
+      if (drag.dragging && K.renderer.endDragVisual) { K.renderer.endDragVisual(drag.id, element, 0); }
+      return;
+    }
+    if (drag.dragging && K.renderer.endDragVisual) {
+      K.renderer.endDragVisual(drag.id, element, 450);
+    }
     element.classList.remove("dragging");
     element.classList.add("drag-returning");
     element.style.transition = "translate 420ms cubic-bezier(.2,1.55,.35,1)";
@@ -144,7 +166,10 @@
     if (drag.raf) { cancelAnimationFrame(drag.raf); }
     clearDropCue();
     try { drag.element.releasePointerCapture(drag.pointerId); } catch (ignore) {}
-    if (immediate || reducedMotion()) { cleanElement(drag.element); }
+    if (immediate || reducedMotion()) {
+      cleanElement(drag.element);
+      if (drag.dragging && K.renderer.endDragVisual) { K.renderer.endDragVisual(drag.id, drag.element, 0); }
+    }
     else { springBack(drag); }
     return true;
   }
@@ -165,32 +190,50 @@
       maxDistance: 0,
       startTime: event.timeStamp,
       samples: [{ x: event.clientX, y: event.clientY, time: event.timeStamp }],
-      raf: 0
+      pathLength: 0, lastX: event.clientX, lastY: event.clientY,
+      dragging: false, hot: false, raf: 0
     };
-    info.element.classList.remove("is-new", "squash", "drag-returning");
-    info.element.classList.add("dragging");
-    info.element.style.transition = "none";
-    setDragOffset(0, 0);
+    info.element.classList.remove("squash", "drag-returning");
+    info.element.classList.add("tap-press");
     try { info.element.setPointerCapture(event.pointerId); } catch (ignore) {}
-    K.audio.play("grab");
-    updateDropCue(event.clientX, event.clientY);
     event.preventDefault();
     return true;
+  }
+
+  function activateDrag(x, y) {
+    if (!active || active.dragging) { return; }
+    active.dragging = true;
+    active.element.classList.remove("tap-press", "is-new");
+    active.element.classList.add("dragging");
+    active.element.style.transition = "none";
+    setDragOffset(0, 0);
+    K.audio.play("grab");
+    if (K.renderer.beginDragVisual) { K.renderer.beginDragVisual(active.id, active.element); }
+    var inside = updateDropCue(x, y);
+    aimAt(x, y, inside);
   }
 
   function finishDrag(event, cancelled) {
     if (!active || event.pointerId !== active.pointerId) { return false; }
     var drag = active;
-    aimAt(event.clientX, event.clientY);
-    setDragOffset(drag.targetX, drag.targetY);
+    drag.pathLength += Math.hypot(event.clientX - drag.lastX, event.clientY - drag.lastY);
+    drag.lastX = event.clientX; drag.lastY = event.clientY;
     drag.maxDistance = Math.max(drag.maxDistance,
       Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY));
     pushSample(event.clientX, event.clientY, event.timeStamp);
-    var duration = event.timeStamp - drag.startTime;
-    var isTap = !cancelled && drag.maxDistance < DRAG_DISTANCE && duration < TAP_TIME;
-    var inside = !cancelled && updateDropCue(event.clientX, event.clientY);
+    if (!drag.dragging && drag.maxDistance >= DRAG_DISTANCE) { activateDrag(event.clientX, event.clientY); }
+    var releaseDistance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+    var fallbackTap = drag.dragging && releaseDistance <= SAFETY_DISTANCE &&
+      drag.pathLength <= SAFETY_PATH;
+    var isTap = !cancelled && (drag.maxDistance < DRAG_DISTANCE || fallbackTap);
+    var inside = !cancelled && drag.dragging && updateDropCue(event.clientX, event.clientY);
+    if (drag.dragging) {
+      aimAt(event.clientX, event.clientY, inside);
+      setDragOffset(drag.targetX, drag.targetY);
+    }
     var velocity = velocityFrom(event);
-    var thrown = !cancelled && !isTap && flicksToCenter(event.clientX, event.clientY, velocity);
+    var thrown = !cancelled && drag.dragging && !isTap &&
+      flicksToCenter(event.clientX, event.clientY, velocity);
     active = null;
     if (drag.raf) { cancelAnimationFrame(drag.raf); }
     clearDropCue();
@@ -198,16 +241,19 @@
 
     if (isTap) {
       cleanElement(drag.element);
+      if (drag.dragging && K.renderer.endDragVisual) { K.renderer.endDragVisual(drag.id, drag.element, 0); }
       K.game.tapWord(drag.id, false);
       return true;
     }
     if ((inside || thrown) && drag.type === "word") {
+      if (K.renderer.endDragVisual) { K.renderer.endDragVisual(drag.id, drag.element, 430); }
       var accepted = K.game.tapWord(drag.id, false);
       if (accepted) {
         K.renderer.continueDragToCenter(drag.id, drag.element);
         return true;
       }
     } else if ((inside || thrown) && drag.type === "choice") {
+      if (K.renderer.endDragVisual) { K.renderer.endDragVisual(drag.id, drag.element, 0); }
       cleanElement(drag.element);
       K.game.tapWord(drag.id, false);
       return true;
@@ -249,10 +295,17 @@
     document.addEventListener("pointermove", function (event) {
       if (!active || event.pointerId !== active.pointerId) { return; }
       var dx = event.clientX - active.startX, dy = event.clientY - active.startY;
+      active.pathLength += Math.hypot(event.clientX - active.lastX, event.clientY - active.lastY);
+      active.lastX = event.clientX; active.lastY = event.clientY;
       active.maxDistance = Math.max(active.maxDistance, Math.hypot(dx, dy));
-      aimAt(event.clientX, event.clientY);
       pushSample(event.clientX, event.clientY, event.timeStamp);
-      updateDropCue(event.clientX, event.clientY);
+      if (!active.dragging && active.maxDistance >= DRAG_DISTANCE) {
+        activateDrag(event.clientX, event.clientY);
+      }
+      if (active.dragging) {
+        var inside = updateDropCue(event.clientX, event.clientY);
+        aimAt(event.clientX, event.clientY, inside);
+      }
       event.preventDefault();
     });
     document.addEventListener("pointerup", function (event) { finishDrag(event, false); });

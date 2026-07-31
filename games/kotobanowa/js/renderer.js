@@ -5,6 +5,7 @@
   var particles = [], decorations = [], refs = {};
   var nodeMap = {}, angleById = {}, currentLayoutKey = "", pendingEdge = null, treeBusy = false;
   var lastViewportKey = "", resizeQueued = false;
+  var dragVisual = null;
 
   function cacheRefs() {
     ["app", "title-screen", "game-screen", "word-stage", "neighbors", "center-word", "links",
@@ -146,6 +147,107 @@
       line.setAttribute("x2", p.x + "%"); line.setAttribute("y2", p.y + "%");
       svg.appendChild(line);
     });
+  }
+
+  function dragLine(id) {
+    return refs.links ? refs.links.querySelector('line[data-word="' + id + '"]') : null;
+  }
+
+  function elementPoint(element) {
+    if (!element || !element.isConnected || !refs["word-stage"]) { return null; }
+    var rect = element.getBoundingClientRect();
+    var stage = refs["word-stage"].getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2 - stage.left,
+      y: rect.top + rect.height / 2 - stage.top
+    };
+  }
+
+  function updateLineEndpoint(id, element, emphasize) {
+    var line = dragLine(id);
+    var point = elementPoint(element);
+    if (!line || !point) { return; }
+    line.setAttribute("x2", point.x.toFixed(2));
+    line.setAttribute("y2", point.y.toFixed(2));
+    line.classList.toggle("drag-link", !!emphasize);
+  }
+
+  function setDragHot(hot) {
+    if (!dragVisual) { return; }
+    dragVisual.hot = !!hot;
+    if (dragVisual.ring) { dragVisual.ring.classList.toggle("is-hot", !!hot); }
+    var center = document.querySelector(".center-node");
+    if (center) {
+      center.classList.add("drop-ready");
+      center.classList.toggle("drop-hot", !!hot);
+    }
+  }
+
+  function updateDragVisual(id, element, hot) {
+    if (!dragVisual || dragVisual.id !== id) { return; }
+    updateLineEndpoint(id, element, true);
+    var from = elementPoint(element);
+    var center = elementPoint(document.querySelector(".center-node"));
+    if (dragVisual.guide && from && center) {
+      dragVisual.guide.setAttribute("x1", from.x.toFixed(2));
+      dragVisual.guide.setAttribute("y1", from.y.toFixed(2));
+      dragVisual.guide.setAttribute("x2", center.x.toFixed(2));
+      dragVisual.guide.setAttribute("y2", center.y.toFixed(2));
+    }
+    setDragHot(hot);
+  }
+
+  function beginDragVisual(id, element) {
+    if (dragVisual) { endDragVisual(dragVisual.id, dragVisual.element, 0); }
+    var ring = document.createElement("div");
+    ring.className = "drop-target-ring";
+    ring.setAttribute("aria-hidden", "true");
+    refs["word-stage"].appendChild(ring);
+    var guide = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    guide.setAttribute("class", "drag-guide");
+    guide.setAttribute("aria-hidden", "true");
+    refs.links.appendChild(guide);
+    dragVisual = { id: id, element: element, ring: ring, guide: guide, hot: false };
+    var center = document.querySelector(".center-node");
+    if (center) { center.classList.add("drop-ready"); }
+    updateDragVisual(id, element, false);
+  }
+
+  function followReleasedLink(id, element, duration) {
+    var started = performance.now();
+    function pump(now) {
+      if (!element || !element.isConnected) { return; }
+      updateLineEndpoint(id, element, now - started < duration);
+      if (now - started < duration) {
+        requestAnimationFrame(pump);
+      } else {
+        var line = dragLine(id);
+        if (line) { line.classList.remove("drag-link"); }
+      }
+    }
+    requestAnimationFrame(pump);
+  }
+
+  function endDragVisual(id, element, followMs) {
+    if (dragVisual) {
+      if (dragVisual.ring && dragVisual.ring.parentNode) { dragVisual.ring.parentNode.removeChild(dragVisual.ring); }
+      if (dragVisual.guide && dragVisual.guide.parentNode) { dragVisual.guide.parentNode.removeChild(dragVisual.guide); }
+      dragVisual = null;
+    }
+    var center = document.querySelector(".center-node");
+    if (center) { center.classList.remove("drop-ready", "drop-hot"); }
+    if (followMs > 0) { followReleasedLink(id, element, followMs); }
+    else {
+      updateLineEndpoint(id, element, false);
+      var line = dragLine(id);
+      if (line) { line.classList.remove("drag-link"); }
+      requestAnimationFrame(function () {
+        updateLineEndpoint(id, element, false);
+        var settledLine = dragLine(id);
+        if (settledLine) { settledLine.classList.remove("drag-link"); }
+      });
+      setTimeout(function () { updateLineEndpoint(id, element, false); }, 32);
+    }
   }
 
   function fullRebuild() {
@@ -549,6 +651,10 @@
     draw: draw,
     getNode: function (id) { return nodeMap[id] || null; },
     isBusy: function () { return treeBusy; },
+    beginDragVisual: beginDragVisual,
+    updateDragVisual: updateDragVisual,
+    endDragVisual: endDragVisual,
+    setDragHot: setDragHot,
     continueDragToCenter: continueDragToCenter,
     relayoutNow: relayoutNow,
     renderOnce: function (dt) { K.game.update(dt); draw(Math.max(0, dt) / 1000); renderAll(); }
