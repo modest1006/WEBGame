@@ -96,6 +96,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8137", "--directory", "games/ghostlens"],
       "port": 8137
+    },
+    {
+      "name": "kotobanowa",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8138", "--directory", "games/kotobanowa"],
+      "port": 8138
     }
   ]
 }
