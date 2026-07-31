@@ -178,6 +178,23 @@
     return refs.links ? refs.links.querySelector('line[data-word="' + id + '"]') : null;
   }
 
+  function resetLinkToSlot(id) {
+    var line = dragLine(id);
+    var s = K.game.state;
+    var node = nodeMap[id];
+    var slot = node ? Number(node.dataset.slot) : NaN;
+    if (!Number.isFinite(slot)) { slot = s.neighbors.indexOf(id); }
+    if (line && slot >= 0 && s.neighbors.length) {
+      var point = slotPosition(slot, s.neighbors.length);
+      line.setAttribute("x2", point.x + "%");
+      line.setAttribute("y2", point.y + "%");
+      line.classList.remove("drag-link");
+    } else if (line) {
+      line.classList.remove("drag-link");
+    }
+    if (refs.links) { refs.links.classList.remove("links-fading"); }
+  }
+
   function elementPoint(element) {
     if (!element || !element.isConnected || !refs["word-stage"]) { return null; }
     var rect = element.getBoundingClientRect();
@@ -241,13 +258,15 @@
   function followReleasedLink(id, element, duration) {
     var started = performance.now();
     function pump(now) {
-      if (!element || !element.isConnected) { return; }
+      if (!element || !element.isConnected) {
+        resetLinkToSlot(id);
+        return;
+      }
       updateLineEndpoint(id, element, now - started < duration);
       if (now - started < duration) {
         requestAnimationFrame(pump);
       } else {
-        var line = dragLine(id);
-        if (line) { line.classList.remove("drag-link"); }
+        resetLinkToSlot(id);
       }
     }
     requestAnimationFrame(pump);
@@ -262,17 +281,7 @@
     var center = document.querySelector(".center-node");
     if (center) { center.classList.remove("drop-ready", "drop-hot"); }
     if (followMs > 0) { followReleasedLink(id, element, followMs); }
-    else {
-      updateLineEndpoint(id, element, false);
-      var line = dragLine(id);
-      if (line) { line.classList.remove("drag-link"); }
-      requestAnimationFrame(function () {
-        updateLineEndpoint(id, element, false);
-        var settledLine = dragLine(id);
-        if (settledLine) { settledLine.classList.remove("drag-link"); }
-      });
-      setTimeout(function () { updateLineEndpoint(id, element, false); }, 32);
-    }
+    else { resetLinkToSlot(id); }
   }
 
   function fullRebuild() {
@@ -696,6 +705,7 @@
     beginDragVisual: beginDragVisual,
     updateDragVisual: updateDragVisual,
     updateReturningLink: function (id, element) { updateLineEndpoint(id, element, true); },
+    resetLinkToSlot: resetLinkToSlot,
     endDragVisual: endDragVisual,
     setDragHot: setDragHot,
     continueDragToCenter: continueDragToCenter,

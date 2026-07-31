@@ -137,9 +137,17 @@
 
   function cleanElement(element) {
     if (!element) { return; }
+    var cleanToken = (element.__transitionCleanToken || 0) + 1;
+    element.__transitionCleanToken = cleanToken;
+    element.style.transition = "none";
     element.classList.remove("tap-press", "dragging", "drag-returning", "drag-flight");
     element.style.removeProperty("translate");
-    element.style.removeProperty("transition");
+    void element.offsetWidth;
+    requestAnimationFrame(function () {
+      if (element.__transitionCleanToken === cleanToken && element.style.transition === "none") {
+        element.style.removeProperty("transition");
+      }
+    });
     delete element.dataset.dragX; delete element.dataset.dragY;
   }
 
