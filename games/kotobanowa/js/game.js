@@ -120,7 +120,7 @@
   }
 
   function tapWord(id, fromDebug) {
-    if (!K.WORDS[id] || state.transitioning) { return false; }
+    if (!K.WORDS[id] || state.transitioning || (K.renderer.isBusy && K.renderer.isBusy())) { return false; }
     state.lastAction = state.now; state.hintWord = null;
     if (state.mode === "quiz") {
       if (state.neighbors.indexOf(id) >= 0 && state.choices.indexOf(id) < 0) {
