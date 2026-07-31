@@ -79,6 +79,7 @@ games/<game-name>/
 - タッチは「画面上ボタン」と「ジェスチャー（スワイプ/タップ）」を適材適所で。`pointer: coarse` メディアクエリでタッチUIの表示を切り替える
 - `touch-action: none` や `preventDefault` でスクロール/ダブルタップズームの誤爆を防ぐ
 - viewport メタタグ必須。モバイル縦画面レイアウトを `preview_resize`（mobile）で必ず確認する
+- **JSでpx確定するレイアウトは `resize`/`orientationchange` で再計算する**。配置をレイアウト時のviewportサイズから計算して固定すると、スマホ回転後に次の再描画契機まで崩れたまま残る（ことばのわで実発生）。レビュー時は「縦で描画→横にresize→タップせずに重なり/はみ出しスキャン」を両方向で行う
 
 ## ジャイロ操作（DeviceOrientation）
 
